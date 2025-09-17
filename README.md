@@ -1,2 +1,2 @@
 DOOMER
-(https://imgur.com/a/8xs7YIz)
+(https://i.imgur.com/kdHmKG5.png)
