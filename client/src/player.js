@@ -25,10 +25,15 @@ BABYLON.Effect.ShadersStore["pixelateFragmentShader"] = `
 `;
 
 class Player {
-    constructor(scene, canvas) {
+    constructor(scene, canvas, gui) {
         this.scene = scene;
         this.canvas = canvas;
         this.camera = null;
+        this.gui = gui;
+
+        this.health = 3;
+        this.maxHealth = 3;
+        this.healtUI = null;
 
         this.inventory = [null, null];
         this.selectedSlot = 0;
@@ -53,7 +58,48 @@ class Player {
         ];
     }
 
-      setupControls() {
+
+    createHealthUI(){
+        this.healthUI = [];
+
+        const startX = 10;
+        const spacing = 100;
+
+        for (let i = 0; i < this.maxHealth; i++){
+            const heart = new BABYLON.GUI.Image("heart" + i, "./public/sprites/skull.png");
+            heart.width = "140px";
+            heart.height = "140px";
+            heart.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            heart.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            heart.left = startX + i * spacing;
+            heart.top = 20;
+            this.gui.addControl(heart);
+            this.healthUI.push(heart);
+        }
+        this.updateHealthUI();
+    }
+
+        // Обновляем UI при потере здоровья
+    updateHealthUI() {
+        this.healthUI.forEach((heart, i) => {
+            heart.isVisible = i < this.health;
+        });
+    }
+
+    takeDamage(amount = 1) {
+        this.health -= amount;
+        if (this.health < 0) this.health = 0;
+        this.updateHealthUI();
+    }
+
+    heal(amount = 1) {
+        this.health += amount;
+        if (this.health > this.maxHealth) this.health = this.maxHealth;
+        this.updateHealthUI();
+    }
+
+
+    setupControls() {
         this.canvas.tabIndex = 0; // чтобы canvas мог получать фокус
         this.canvas.focus();
 
@@ -217,13 +263,13 @@ updateWeaponSway() {
         }
     }
 
-changeSlot(deltaY) {
-    if (!this.inventory.some(m => m)) return; // если нет предметов
-    const oldSlot = this.selectedSlot;
-    if (deltaY > 0) this.selectedSlot = (this.selectedSlot + 1) % this.inventory.length;
-    else this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
+    changeSlot(deltaY) {
+        if (!this.inventory.some(m => m)) return; // если нет предметов
+        const oldSlot = this.selectedSlot;
+        if (deltaY > 0) this.selectedSlot = (this.selectedSlot + 1) % this.inventory.length;
+        else this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
 
-    console.log(`Сменили слот с ${oldSlot} на ${this.selectedSlot}`);
+        console.log(`Сменили слот с ${oldSlot} на ${this.selectedSlot}`);
 }
 
 
@@ -251,20 +297,20 @@ changeSlot(deltaY) {
         // тут логика применения предмета (стрельба, атака и т.д.)
     }
 
-throwItem() {
-    const mesh = this.inventory[this.selectedSlot];
-    if (!mesh) return;
+    throwItem() {
+        const mesh = this.inventory[this.selectedSlot];
+        if (!mesh) return;
 
-    // Снимаем с камеры
-    mesh.parent = null;
-    mesh.checkCollisions = true;
+        // Снимаем с камеры
+        mesh.parent = null;
+        mesh.checkCollisions = true;
 
-    // Ставим перед игроком на высоте y = 3
-    const forward = this.camera.getForwardRay().direction;
-    mesh.position = this.camera.position.add(forward.scale(3));
-    mesh.position.y = 2;
-    mesh.isPickable = true;
+        // Ставим перед игроком на высоте y = 3
+        const forward = this.camera.getForwardRay().direction;
+        mesh.position = this.camera.position.add(forward.scale(3));
+        mesh.position.y = 2;
+        mesh.isPickable = true;
 
-    this.inventory[this.selectedSlot] = null;
+        this.inventory[this.selectedSlot] = null;
 }
 }

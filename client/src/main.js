@@ -133,10 +133,11 @@ const createScene = function () {
     const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     scene.collisionsEnabled = true;
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
-    const player = new Player(scene, canvas).CreateController({
+    const player = new Player(scene, canvas, ui);
+    player.CreateController({
         x: 1, y: 5, z: 1
     });
-    
+    player.createHealthUI();
     const fps = 60;
     const gravity = -9.81;
     scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
