@@ -1,14 +1,33 @@
-
-
 const canvas = document.getElementById("game-canvas");
 const engine = new BABYLON.Engine(canvas, true, {
     stencil: true }, true);
 
+function cursorShow(ui, scene){
+    // Курсор
+    const cursor = new BABYLON.GUI.Image("cursor", "./public/cursor.png");
+    cursor.width = "64px";
+    cursor.height = "64px";
+    cursor.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+    cursor.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+    ui.addControl(cursor);
 
+    // Параметры покачивания
+    const amplitude = 5; // пиксели
+    const frequency = 2; // колебаний в секунду
+    let time = 0;
 
+    scene.onBeforeRenderObservable.add(() => {
+        const deltaTime = scene.getEngine().getDeltaTime() / 1000;
+        time += deltaTime;
+
+        // Синусоидальное смещение
+        cursor.left = Math.sin(time * frequency * 2 * Math.PI) * amplitude;
+        cursor.top = Math.cos(time * frequency * 2 * Math.PI) * amplitude;
+    });
+}
 
 async function createEnvironment(scene){
-    
+
     const steelpipes = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
     {
         position: new BABYLON.Vector3(-72, 3, 7),
@@ -82,10 +101,11 @@ async function createItems(scene){
         weaponMesh.material = new BABYLON.StandardMaterial("rifleMat", scene);
         weaponMesh.material.diffuseTexture = rifleTex;
 
-        weaponMesh.scaling = new BABYLON.Vector3(1, 1, 1);
+        weaponMesh.scaling = new BABYLON.Vector3(0.1, 0.1, 0.1);
 
         // Размещаем на полу
         weaponMesh.position = new BABYLON.Vector3(3, 2, 5);
+        weaponMesh.rotation = new BABYLON.Vector3(0, Math.PI/2, 0);
         weaponMesh.isPickable = true;
         weaponMesh.checkCollisions = true;
     });
@@ -110,6 +130,7 @@ async function createItems(scene){
 
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
+    const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     scene.collisionsEnabled = true;
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
     const player = new Player(scene, canvas).CreateController({
@@ -126,14 +147,15 @@ const createScene = function () {
         scene);
     // Dim the light a small amount 0 - 1
     light.intensity = 1;
+    cursorShow(ui, scene);  
     createEnvironment(scene);
     createItems(scene);
-
+      
 
 
     scene.onPointerDown = (evt) => {
-        if (evt.button === 0)  this.engine.enterPointerlock();
-        if (evt.button === 1)  this.engine.exitPointerlock();
+        if (evt.button === 0)  scene.getEngine().enterPointerlock();
+        if (evt.button === 1)  scene.getEngine().exitPointerlock();
     };
 
 

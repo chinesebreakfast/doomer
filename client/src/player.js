@@ -31,8 +31,12 @@ class Player {
         this.camera = null;
 
         this.inventory = [null, null];
+        this.selectedSlot = 0;
         this.pickDistance = 3;
         this.pickKey = "KeyE";
+        this.throwKey = "KeyQ";
+        this.slotOffsetY = 0.3;
+        this.slotLiftTime = 200; 
 
         // Для head bob
         this.bobAmplitude = 0.05;  // амплитуда
@@ -40,13 +44,47 @@ class Player {
         this.bobTime = 0;          // внутренний таймер
         this.prevPosition = null;   // для вычисления скорости
         this.baseHeight = 2;
+        this.keysPressed = { w: false, a: false, s: false, d: false };
+        this.setupControls();
 
-        window.addEventListener("keydown", (event) => {
-            if (event.code === this.pickKey) {
-                console.log("Попытка подобрать предмет");
-                this.tryPickup();
+        this.handsPositions = [
+            new BABYLON.Vector3(0.5, -0.5, 2), // слот 0
+            new BABYLON.Vector3(-0.5, -0.5, 2) // слот 1
+        ];
+    }
+
+      setupControls() {
+        this.canvas.tabIndex = 0; // чтобы canvas мог получать фокус
+        this.canvas.focus();
+
+        this.canvas.addEventListener("keydown", (e) => {
+            switch (e.code) {
+                case "KeyW": this.keysPressed.w = true; break;
+                case "KeyA": this.keysPressed.a = true; break;
+                case "KeyS": this.keysPressed.s = true; break;
+                case "KeyD": this.keysPressed.d = true; break;
+                case "KeyE": this.tryPickup(); break;
+                case "KeyQ": this.throwItem(); break;
             }
         });
+
+        this.canvas.addEventListener("keyup", (e) => {
+            switch (e.code) {
+                case "KeyW": this.keysPressed.w = false; break;
+                case "KeyA": this.keysPressed.a = false; break;
+                case "KeyS": this.keysPressed.s = false; break;
+                case "KeyD": this.keysPressed.d = false; break;
+            }
+        });
+
+        this.canvas.addEventListener("wheel", (e) => {
+            if (e.deltaY > 0) this.changeSlot(1);
+            else this.changeSlot(-1);
+        });
+    }
+
+    isMoving() {
+        return this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d;
     }
 
 
@@ -89,27 +127,39 @@ class Player {
         });
     }
 
-    updateWeaponSway() {
-    const time = performance.now() * 0.002; // таймер
+updateWeaponSway() {
+    const time = performance.now() * 0.002;
+
     this.inventory.forEach((mesh, i) => {
         if (!mesh) return;
 
-        // Базовые позиции для оружия
-        const basePos = (i === 0)
-            ? new BABYLON.Vector3(0.5, -0.5, 2)   // правая рука
-            : new BABYLON.Vector3(-0.5, -0.5, 2); // левая рука
+        // Базовая позиция слота
+        const base = this.handsPositions[i].clone();
 
-        // Покачивание
-        const swayX = Math.sin(time * 2) * 0.05;  // влево-вправо
-        const swayY = Math.cos(time * 4) * 0.03;  // вверх-вниз
+        // Если слот выбран, поднимаем оружие
+        if (i === this.selectedSlot) {
+            base.y += this.slotLift;
+        }
 
-        mesh.position.x = basePos.x + swayX;
-        mesh.position.y = basePos.y + swayY;
-        mesh.position.z = basePos.z;
+        // Проверяем движение
+        const moving = this.keysPressed && (this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d);
 
-        // Лёгкий наклон
-        mesh.rotation.z = Math.sin(time * 2) * 0.02;
-        mesh.rotation.x = Math.cos(time * 2) * 0.01;
+        if (moving) {
+            const swayX = Math.sin(time * 2) * 0.05;
+            const swayY = Math.cos(time * 4) * 0.03;
+
+            mesh.position.x = base.x + swayX;
+            mesh.position.y = base.y + swayY;
+            mesh.position.z = base.z;
+
+            // Лёгкий наклон
+            mesh.rotation.z = Math.sin(time * 2) * 0.02;
+            mesh.rotation.x = Math.cos(time * 2) * 0.01;
+        } else {
+            // Стоим на месте — оружие в базовой позиции
+            mesh.position.copyFrom(base);
+            mesh.rotation.set(0, 0, 0);
+        }
     });
 }
 
@@ -117,10 +167,10 @@ class Player {
         if (!this.prevPosition) return;
 
         // Вычисляем скорость движения игрока
-        const delta = this.camera.position.subtract(this.prevPosition);
-        const speed = delta.length();
+        //const delta = this.camera.position.subtract(this.prevPosition);
+        //const speed = delta.length();
 
-        if (speed > 0.001) { // движется
+        if (this.isMoving) { // движется
             this.bobTime += this.scene.getEngine().getDeltaTime() / 1000 * this.bobFrequency;
             this.camera.position.y = this.baseHeight + Math.sin(this.bobTime) * this.bobAmplitude;
         } else { // стоит на месте
@@ -153,14 +203,44 @@ class Player {
     attachToCamera(mesh, slotIndex) {
         mesh.parent = this.camera;
         mesh.checkCollisions = false;
+        mesh.isPickable = false;
 
-        if (slotIndex === 0) {
-            mesh.position = new BABYLON.Vector3(0.5, -0.5, 2); // правая рука
-        } else if (slotIndex === 1) {
-            mesh.position = new BABYLON.Vector3(-0.5, -0.5, 2); // левая рука
+        // позиция слота
+        mesh.position = slotIndex === 0
+            ? new BABYLON.Vector3(0.5, -0.5, 2)
+            : new BABYLON.Vector3(-0.5, -0.5, 2);
+        mesh.rotation = new BABYLON.Vector3(0, 0, 0);
+
+        // поднятие активного предмета
+        if (slotIndex === this.selectedSlot) {
+            mesh.position.y += this.slotOffsetY;
+        }
+    }
+
+changeSlot(deltaY) {
+    if (!this.inventory.some(m => m)) return; // если нет предметов
+    const oldSlot = this.selectedSlot;
+    if (deltaY > 0) this.selectedSlot = (this.selectedSlot + 1) % this.inventory.length;
+    else this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
+
+    console.log(`Сменили слот с ${oldSlot} на ${this.selectedSlot}`);
+}
+
+
+    animateSlotChange(oldSlot, newSlot) {
+        // Опускаем старый слот
+        if (this.inventory[oldSlot]) {
+            this.inventory[oldSlot].position.y -= this.slotOffsetY;
         }
 
-        mesh.rotation = new BABYLON.Vector3(0, 0, 0);
+        // Поднимаем новый слот плавно
+        if (this.inventory[newSlot]) {
+            const mesh = this.inventory[newSlot];
+            mesh.position.y += this.slotOffsetY;
+            setTimeout(() => {
+                if (mesh) mesh.position.y -= this.slotOffsetY;
+            }, this.slotLiftTime);
+        }
     }
 
     useItem(slotIndex) {
@@ -171,12 +251,20 @@ class Player {
         // тут логика применения предмета (стрельба, атака и т.д.)
     }
 
-    removeItem(slotIndex) {
-        const mesh = this.inventory[slotIndex];
-        if (!mesh) return;
+throwItem() {
+    const mesh = this.inventory[this.selectedSlot];
+    if (!mesh) return;
 
-        mesh.parent = null;
-        mesh.dispose();
-        this.inventory[slotIndex] = null;
-    }
+    // Снимаем с камеры
+    mesh.parent = null;
+    mesh.checkCollisions = true;
+
+    // Ставим перед игроком на высоте y = 3
+    const forward = this.camera.getForwardRay().direction;
+    mesh.position = this.camera.position.add(forward.scale(3));
+    mesh.position.y = 2;
+    mesh.isPickable = true;
+
+    this.inventory[this.selectedSlot] = null;
+}
 }
