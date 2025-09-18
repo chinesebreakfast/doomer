@@ -4,6 +4,11 @@ const engine = new BABYLON.Engine(canvas, true, {
 
 const enemies   = [];
 const players   = [];
+const itemTypes = {
+    "rifle": {model: "rifle.obj", gun: true, damage: 2, texture: true},
+    "tool":  {model: "tool.obj", gun: false, damage: 1, texture: true},
+    "gauntlet": {model: "gauntlet.glb", gun: false, damage: 3, texture: false}
+};
 
 function cursorShow(ui, scene){
     // Курсор
@@ -29,7 +34,7 @@ function cursorShow(ui, scene){
     });
 }
 
-async function createEnvironment(scene){
+async function createEnvironment(scene, shadowGenerator){
 
     const steelpipes = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
     {
@@ -67,6 +72,7 @@ async function createEnvironment(scene){
     }, scene);
 
     ground.checkCollisions = true;
+    ground.receiveShadows = true;
 
     const groundMat = new BABYLON.StandardMaterial("groundMaterial", scene);
     const groundTexture = new BABYLON.Texture("./public/image.png", scene);
@@ -81,7 +87,7 @@ async function createEnvironment(scene){
 
     const shop = await BABYLON.SceneLoader.ImportMeshAsync(
         "",
-        "./public/models/terminal/",
+        "./public/models/city/",
         "house.glb", scene
     );
     shop.meshes[0].checkCollisions = true;
@@ -106,38 +112,33 @@ async function createEnvironment(scene){
     angel.meshes[0].rotation = new BABYLON.Vector3(0, Math.PI/4, 0);
 }
 
-async function createItems(scene){
-    BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/tool/", "tool.obj", scene).then(result => {
-        const weaponMesh = result.meshes[0];
-        console.log("HEYY");
-        const rifleTex = new BABYLON.Texture("./public/models/tool/tool.jpg", scene);
-        weaponMesh.material = new BABYLON.StandardMaterial("rifleMat", scene);
-        weaponMesh.material.diffuseTexture = rifleTex;
+function spawnItem(type, position, scale, scene, shadowGenerator) {
+    const props = itemTypes[type];
+    BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/items/", props.model, scene)
+        .then(result => {
+            const mesh = result.meshes[0];
+            mesh.position = position.clone();
+            mesh.isPickable = true;
+            mesh.itemProps = props; // сохраняем свойства прямо в меш
+            mesh.scaling = new BABYLON.Vector3(scale, scale, scale);
+            mesh.checkCollisions = true;
+            shadowGenerator.addShadowCaster(mesh);
+            if(props.texture){
+                const material = new BABYLON.StandardMaterial(
+                    type + "_mat", scene);
+                const tex = new BABYLON.Texture(
+                    "./public/models/items/" + type + ".png", scene);
+                material.backFaceCulling = false;
+                material.diffuseTexture = tex;
+                mesh.material = material; 
+            }
+        });
+}
 
-        weaponMesh.scaling = new BABYLON.Vector3(0.1, 0.1, 0.1);
-
-        // Размещаем на полу
-        weaponMesh.position = new BABYLON.Vector3(3, 2, 5);
-        weaponMesh.rotation = new BABYLON.Vector3(0, 0, Math.PI/2);
-        weaponMesh.isPickable = true;
-        weaponMesh.checkCollisions = true;
-    });
-    
-    //загрузка предмета
-    BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/rifle/", "1.obj", scene).then(result => {
-        const weaponMesh = result.meshes[0];
-        
-        const rifleTex = new BABYLON.Texture("./public/models/rifle/1.png", scene);
-        weaponMesh.material = new BABYLON.StandardMaterial("rifleMat", scene);
-        weaponMesh.material.diffuseTexture = rifleTex;
-
-        weaponMesh.scaling = new BABYLON.Vector3(1, 1, 1);
-
-        // Размещаем на полу
-        weaponMesh.position = new BABYLON.Vector3(5, 2, 5);
-        weaponMesh.isPickable = true;
-        weaponMesh.checkCollisions = true;
-    });
+async function createItems(scene, shadowGenerator){
+    spawnItem("rifle", new BABYLON.Vector3(5, 3, 5), 1, scene, shadowGenerator);
+    spawnItem("tool", new BABYLON.Vector3(-5, 3, 5), 0.1, scene, shadowGenerator);
+    spawnItem("gauntlet", new BABYLON.Vector3(-5, 3, -5), 1, scene, shadowGenerator);
 }
 
 
@@ -150,23 +151,28 @@ const createScene = function () {
     players.push(player);
     player.CreateController({
         x: 1, y: 5, z: 1
-    });
+    }, engine.getRenderHeight(), engine.getRenderWidth());
     player.createHealthUI();
     const fps = 60;
     const gravity = -9.81;
     scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
     
-    enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 1, -10)));
+    //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
+    enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
+
     
-    const light = new BABYLON.HemisphericLight("light", 
-        new BABYLON.Vector3(0, 50, 0), 
-        scene);
-    // Dim the light a small amount 0 - 1
-    light.intensity = 1;
+    const sun = new BABYLON.DirectionalLight("sun", 
+        new BABYLON.Vector3(-1, -2, -1), scene);1
+    sun.intensity = 1.2;
+    sun.position = new BABYLON.Vector3(50, 100, 50);
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, sun);
     cursorShow(ui, scene);  
-    createEnvironment(scene);
-    createItems(scene);
-      
+    createEnvironment(scene, shadowGenerator);
+    createItems(scene, shadowGenerator);
+
+    enemies.forEach(enemy => {
+        shadowGenerator.addShadowCaster(enemy.mesh);
+    });
 
 
     scene.onPointerDown = (evt) => {

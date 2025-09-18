@@ -1,12 +1,23 @@
 class Enemy {
-    constructor(scene, position, speed = 0.05){
+    constructor(scene, position, modelName,  scale = 1, speed = 0.05){
         this.scene = scene;
-        this.mesh = BABYLON.MeshBuilder.CreateBox("enemy", {size:2}, scene);
+        // Невидимый хитбокс
+        this.mesh = BABYLON.MeshBuilder.CreateBox("enemyHitbox", { size: 2 }, scene);
         this.mesh.position = position.clone();
-        this.mesh.material = new BABYLON.StandardMaterial("enemyMat", scene);
-        this.mesh.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
-        this.speed = speed;
         this.mesh.checkCollisions = true;
+        this.mesh.isVisible = false;
+
+        this.speed = speed;
+        this.modelName = modelName;
+
+        BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/enemies/", this.modelName, scene).then(result => {
+            const model = result.meshes[0];
+            model.scaling = new BABYLON.Vector3(scale, scale, scale);
+            model.checkCollisions = false;
+            model.parent = this.mesh;
+        });
+
+        
     }
 
     update(players){

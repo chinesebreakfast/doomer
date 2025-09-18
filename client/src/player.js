@@ -1,27 +1,30 @@
 BABYLON.Effect.ShadersStore["pixelateVertexShader"] = `
-  precision highp float;
+    precision highp float;
 
-  // стандартные атрибуты/униформы
-  attribute vec2 position;
-  varying vec2 vUV;
+    // стандартные атрибуты/униформы
+    attribute vec2 position;
+    varying vec2 vUV;
 
-  void main(void) {
-    vUV = (position + 1.0) * 0.5;
-    gl_Position = vec4(position, 0.0, 1.0);
-  }
+    void main(void) {
+        vUV = (position + 1.0) * 0.5;
+        gl_Position = vec4(position, 0.0, 1.0);
+    }
 `;
 
 BABYLON.Effect.ShadersStore["pixelateFragmentShader"] = `
-  precision highp float;
-  varying vec2 vUV;
-  uniform sampler2D textureSampler;
-  uniform float pixelSize;
+    precision highp float;
+    varying vec2 vUV;
+    uniform sampler2D textureSampler;
+    uniform float pixelSize;
+    uniform vec2 screenSize; // добавляем размеры экрана
 
-  void main(void) {
-    vec2 uv = vUV;
-    uv = floor(uv * pixelSize) / pixelSize; // уменьшаем детализацию
-    gl_FragColor = texture2D(textureSampler, uv);
-  }
+    void main(void) {
+        vec2 uv = vUV;
+        uv *= screenSize;             // переводим UV в пиксели
+        uv = floor(uv / pixelSize) * pixelSize; // делаем пикселизацию
+        uv /= screenSize;             // обратно в 0..1
+        gl_FragColor = texture2D(textureSampler, uv);
+    }
 `;
 
 class Player {
@@ -134,7 +137,7 @@ class Player {
     }
 
 
-    CreateController(position){
+    CreateController(position, height, width){
         this.camera = new BABYLON.FreeCamera("camera", 
             new BABYLON.Vector3(position.x, position.y, position.z),
             this.scene);
@@ -142,14 +145,15 @@ class Player {
         const pixelEffect = new BABYLON.PostProcess(
             "pixelEffect",   // имя эффекта
             "pixelate",      // имя шейдера (мы его сейчас создадим)
-            ["pixelSize"],   // параметры, которые будем менять
+            ["pixelSize", "screenSize"],   // параметры, которые будем менять
             null,
             1.0,             // масштаб (1 = во весь экран)
             this.camera           // та самая камера игрока
         );
 
         pixelEffect.onApply = function(effect) {
-            effect.setFloat("pixelSize", 100.0); // чем меньше число — тем крупнее «пиксели»
+            effect.setFloat("pixelSize", 5.0); // чем меньше число — тем крупнее «пиксели»
+            effect.setFloat2("screenSize", width, height);
         };
 
         this.camera.attachControl(this.canvas, true);
