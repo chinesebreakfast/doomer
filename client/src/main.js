@@ -8,18 +8,7 @@ const engine = new BABYLON.Engine(canvas, true, {
 
 
 async function createEnvironment(scene){
-
-    const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:1000.0}, scene);
-    const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
-    skyboxMaterial.backFaceCulling = false;
-    skyboxMaterial.disableLighting = true;
-    skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture(
-    "./public/skyboxes/1.jpg", scene);
-    skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
-
-    skybox.material = skyboxMaterial;
-    skybox.infiniteDistance = true;
-
+    
     const steelpipes = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
     {
         position: new BABYLON.Vector3(-72, 3, 7),
@@ -85,28 +74,21 @@ async function createEnvironment(scene){
     collider.checkCollisions = true;
 }
 
+async function createItems(scene){
+    BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/tool/", "tool.obj", scene).then(result => {
+        const weaponMesh = result.meshes[0];
+        console.log("HEYY");
+        const rifleTex = new BABYLON.Texture("./public/models/tool/tool.jpg", scene);
+        weaponMesh.material = new BABYLON.StandardMaterial("rifleMat", scene);
+        weaponMesh.material.diffuseTexture = rifleTex;
 
-const createScene = function () {
-    const scene = new BABYLON.Scene(engine);
-    scene.collisionsEnabled = true;
-    
-    const player = new Player(scene, canvas).CreateController({
-        x: 1, y: 5, z: 1
+        weaponMesh.scaling = new BABYLON.Vector3(1, 1, 1);
+
+        // Размещаем на полу
+        weaponMesh.position = new BABYLON.Vector3(3, 2, 5);
+        weaponMesh.isPickable = true;
+        weaponMesh.checkCollisions = true;
     });
-    
-    const fps = 60;
-    const gravity = -9.81;
-    scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
-    
-    
-    const light = new BABYLON.HemisphericLight("light", 
-        new BABYLON.Vector3(0, 50, 0), 
-        scene);
-    // Dim the light a small amount 0 - 1
-    light.intensity = 1;
-    createEnvironment(scene);
-    
-
     
     //загрузка предмета
     BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/rifle/", "1.obj", scene).then(result => {
@@ -123,6 +105,30 @@ const createScene = function () {
         weaponMesh.isPickable = true;
         weaponMesh.checkCollisions = true;
     });
+}
+
+
+const createScene = function () {
+    const scene = new BABYLON.Scene(engine);
+    scene.collisionsEnabled = true;
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    const player = new Player(scene, canvas).CreateController({
+        x: 1, y: 5, z: 1
+    });
+    
+    const fps = 60;
+    const gravity = -9.81;
+    scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
+    
+    
+    const light = new BABYLON.HemisphericLight("light", 
+        new BABYLON.Vector3(0, 50, 0), 
+        scene);
+    // Dim the light a small amount 0 - 1
+    light.intensity = 1;
+    createEnvironment(scene);
+    createItems(scene);
+
 
 
     scene.onPointerDown = (evt) => {
