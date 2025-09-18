@@ -2,6 +2,9 @@ const canvas = document.getElementById("game-canvas");
 const engine = new BABYLON.Engine(canvas, true, {
     stencil: true }, true);
 
+const enemies   = [];
+const players   = [];
+
 function cursorShow(ui, scene){
     // Курсор
     const cursor = new BABYLON.GUI.Image("cursor", "./public/cursor.png");
@@ -91,6 +94,16 @@ async function createEnvironment(scene){
     collider.position.z -= 2;
     collider.isVisible = false;
     collider.checkCollisions = true;
+
+    const angel = await BABYLON.SceneLoader.ImportMeshAsync(
+        "",
+        "./public/models/city/",
+        "angel.glb", scene
+    );
+    angel.meshes[0].checkCollisions = true;
+    angel.meshes[0].scaling = new BABYLON.Vector3(5, 5, 5);
+    angel.meshes[0].position = new BABYLON.Vector3(-100, 0, 200);
+    angel.meshes[0].rotation = new BABYLON.Vector3(0, Math.PI/4, 0);
 }
 
 async function createItems(scene){
@@ -134,6 +147,7 @@ const createScene = function () {
     scene.collisionsEnabled = true;
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
     const player = new Player(scene, canvas, ui);
+    players.push(player);
     player.CreateController({
         x: 1, y: 5, z: 1
     });
@@ -142,6 +156,7 @@ const createScene = function () {
     const gravity = -9.81;
     scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
     
+    enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 1, -10)));
     
     const light = new BABYLON.HemisphericLight("light", 
         new BABYLON.Vector3(0, 50, 0), 
@@ -158,7 +173,9 @@ const createScene = function () {
         if (evt.button === 0)  scene.getEngine().enterPointerlock();
         if (evt.button === 1)  scene.getEngine().exitPointerlock();
     };
-
+    scene.onBeforeRenderObservable.add(() => {
+        enemies.forEach(enemy => enemy.update(players));
+    });
 
     return scene;
 };
