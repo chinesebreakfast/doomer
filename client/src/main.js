@@ -105,7 +105,7 @@ async function createItems(scene){
 
         // Размещаем на полу
         weaponMesh.position = new BABYLON.Vector3(3, 2, 5);
-        weaponMesh.rotation = new BABYLON.Vector3(0, Math.PI/2, 0);
+        weaponMesh.rotation = new BABYLON.Vector3(0, 0, Math.PI/2);
         weaponMesh.isPickable = true;
         weaponMesh.checkCollisions = true;
     });
