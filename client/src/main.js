@@ -5,8 +5,8 @@ const engine = new BABYLON.Engine(canvas, true, {
 const enemies   = [];
 const players   = [];
 const itemTypes = {
-    "rifle": {model: "rifle.obj", gun: true, damage: 2, texture: true},
-    "tool":  {model: "tool.obj", gun: false, damage: 1, texture: true},
+    "rifle": {model: "rifle.glb", gun: true, damage: 2, texture: false},
+    "tool":  {model: "tool.glb", gun: false, damage: 1, texture: false},
     "gauntlet": {model: "gauntlet.glb", gun: false, damage: 3, texture: false}
 };
 
@@ -122,6 +122,7 @@ function spawnItem(type, position, scale, scene, shadowGenerator) {
             mesh.itemProps = props; // сохраняем свойства прямо в меш
             mesh.scaling = new BABYLON.Vector3(scale, scale, scale);
             mesh.checkCollisions = true;
+            mesh.animations = [];
             shadowGenerator.addShadowCaster(mesh);
             if(props.texture){
                 const material = new BABYLON.StandardMaterial(
@@ -132,19 +133,25 @@ function spawnItem(type, position, scale, scene, shadowGenerator) {
                 material.diffuseTexture = tex;
                 mesh.material = material; 
             }
+            if(result.animationGroups && result.animationGroups.length > 0){
+                mesh.animations = result.animationGroups;
+                mesh.animations[0].play(false);
+            }
         });
 }
 
 async function createItems(scene, shadowGenerator){
-    spawnItem("rifle", new BABYLON.Vector3(5, 3, 5), 1, scene, shadowGenerator);
-    spawnItem("tool", new BABYLON.Vector3(-5, 3, 5), 0.1, scene, shadowGenerator);
-    spawnItem("gauntlet", new BABYLON.Vector3(-5, 3, -5), 1, scene, shadowGenerator);
+    spawnItem("rifle", new BABYLON.Vector3(10, 3, 5), 1, scene, shadowGenerator);
+    spawnItem("tool", new BABYLON.Vector3(5, 3, 5), 1, scene, shadowGenerator);
+    spawnItem("gauntlet", new BABYLON.Vector3(1, 3, 5), 1, scene, shadowGenerator);
 }
 
 
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
     const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    ui.rootContainer.isPointerBlocker = false;
+    scene.preventDefaultOnPointerDown = false;
     scene.collisionsEnabled = true;
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
     const player = new Player(scene, canvas, ui);
@@ -160,6 +167,18 @@ const createScene = function () {
     //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
     enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
 
+    scene.onPointerObservable.add((pointerInfo) => {
+        switch (pointerInfo.type) {
+            case BABYLON.PointerEventTypes.POINTERDOWN:
+                if (pointerInfo.event.button === 0) {
+                    const ball = BABYLON.MeshBuilder.CreateSphere("sphere", {
+                        diameter: 0.2
+                    }, scene);
+                    ball.position = player.getPosition();
+                }
+                break;
+        }
+    }, BABYLON.PointerEventTypes.POINTERDOWN);
     
     const sun = new BABYLON.DirectionalLight("sun", 
         new BABYLON.Vector3(-1, -2, -1), scene);1

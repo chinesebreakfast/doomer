@@ -30,7 +30,7 @@ BABYLON.Effect.ShadersStore["pixelateFragmentShader"] = `
 class Player {
     constructor(scene, canvas, gui) {
         this.scene = scene;
-        this.canvas = canvas;
+        this.canvas = this.scene.getEngine().getRenderingCanvas();
         this.camera = null;
         this.gui = gui;
 
@@ -60,8 +60,6 @@ class Player {
             new BABYLON.Vector3(-0.5, -0.5, 2) // слот 1
         ];
     }
-
-
     createHealthUI(){
         this.healthUI = [];
 
@@ -81,27 +79,22 @@ class Player {
         }
         this.updateHealthUI();
     }
-
-        // Обновляем UI при потере здоровья
+    // Обновляем UI при потере здоровья
     updateHealthUI() {
         this.healthUI.forEach((heart, i) => {
             heart.isVisible = i < this.health;
         });
     }
-
     takeDamage(amount = 1) {
         this.health -= amount;
         if (this.health < 0) this.health = 0;
         this.updateHealthUI();
     }
-
     heal(amount = 1) {
         this.health += amount;
         if (this.health > this.maxHealth) this.health = this.maxHealth;
         this.updateHealthUI();
     }
-
-
     setupControls() {
         this.canvas.tabIndex = 0; // чтобы canvas мог получать фокус
         this.canvas.focus();
@@ -135,8 +128,7 @@ class Player {
     isMoving() {
         return this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d;
     }
-
-
+        
     CreateController(position, height, width){
         this.camera = new BABYLON.FreeCamera("camera", 
             new BABYLON.Vector3(position.x, position.y, position.z),
@@ -144,7 +136,7 @@ class Player {
 
         const pixelEffect = new BABYLON.PostProcess(
             "pixelEffect",   // имя эффекта
-            "pixelate",      // имя шейдера (мы его сейчас создадим)
+            "pixelate",      // имя шейдера
             ["pixelSize", "screenSize"],   // параметры, которые будем менять
             null,
             1.0,             // масштаб (1 = во весь экран)
@@ -152,7 +144,7 @@ class Player {
         );
 
         pixelEffect.onApply = function(effect) {
-            effect.setFloat("pixelSize", 5.0); // чем меньше число — тем крупнее «пиксели»
+            effect.setFloat("pixelSize", 5); // чем меньше число — тем крупнее «пиксели»
             effect.setFloat2("screenSize", width, height);
         };
 
@@ -177,41 +169,41 @@ class Player {
         });
     }
 
-updateWeaponSway() {
-    const time = performance.now() * 0.002;
+    updateWeaponSway() {
+        const time = performance.now() * 0.002;
 
-    this.inventory.forEach((mesh, i) => {
-        if (!mesh) return;
+        this.inventory.forEach((mesh, i) => {
+            if (!mesh) return;
 
-        // Базовая позиция слота
-        const base = this.handsPositions[i].clone();
+            // Базовая позиция слота
+            const base = this.handsPositions[i].clone();
 
-        // Если слот выбран, поднимаем оружие
-        if (i === this.selectedSlot) {
-            base.y += this.slotLift;
-        }
+            // Если слот выбран, поднимаем оружие
+            if (i === this.selectedSlot) {
+                base.y += this.slotLift;
+            }
 
-        // Проверяем движение
-        const moving = this.keysPressed && (this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d);
+            // Проверяем движение
+            const moving = this.keysPressed && (this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d);
 
-        if (moving) {
-            const swayX = Math.sin(time * 2) * 0.05;
-            const swayY = Math.cos(time * 4) * 0.03;
+            if (moving) {
+                const swayX = Math.sin(time * 2) * 0.05;
+                const swayY = Math.cos(time * 4) * 0.03;
 
-            mesh.position.x = base.x + swayX;
-            mesh.position.y = base.y + swayY;
-            mesh.position.z = base.z;
+                mesh.position.x = base.x + swayX;
+                mesh.position.y = base.y + swayY;
+                mesh.position.z = base.z;
 
-            // Лёгкий наклон
-            mesh.rotation.z = Math.sin(time * 2) * 0.02;
-            mesh.rotation.x = Math.cos(time * 2) * 0.01;
-        } else {
-            // Стоим на месте — оружие в базовой позиции
-            mesh.position.copyFrom(base);
-            mesh.rotation.set(0, 0, 0);
-        }
-    });
-}
+                // Лёгкий наклон
+                mesh.rotation.z = Math.sin(time * 2) * 0.02;
+                mesh.rotation.x = Math.cos(time * 2) * 0.01;
+            } else {
+                // Стоим на месте — оружие в базовой позиции
+                mesh.position.copyFrom(base);
+                mesh.rotation.set(0, 0, 0);
+            }
+        });
+    }
 
     updateBob() {
         if (!this.prevPosition) return;
@@ -257,14 +249,18 @@ updateWeaponSway() {
 
         // позиция слота
         mesh.position = slotIndex === 0
-            ? new BABYLON.Vector3(0.5, -0.5, 2)
+            ? new BABYLON.Vector3(0.5, -0.5, 5)
             : new BABYLON.Vector3(-0.5, -0.5, 2);
         mesh.rotation = new BABYLON.Vector3(0, 0, 0);
-
+        
         // поднятие активного предмета
         if (slotIndex === this.selectedSlot) {
             mesh.position.y += this.slotOffsetY;
         }
+    }
+
+    getActiveItem(){
+        return this.inventory[this.selectedSlot];
     }
 
     changeSlot(deltaY) {
@@ -274,8 +270,7 @@ updateWeaponSway() {
         else this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
 
         console.log(`Сменили слот с ${oldSlot} на ${this.selectedSlot}`);
-}
-
+    }
 
     animateSlotChange(oldSlot, newSlot) {
         // Опускаем старый слот
@@ -298,7 +293,7 @@ updateWeaponSway() {
         if (!mesh) return;
 
         console.log("Используем предмет:", mesh.name);
-        // тут логика применения предмета (стрельба, атака и т.д.)
+        this.playAnimation(mesh, "Shot");
     }
 
     throwItem() {
@@ -316,5 +311,18 @@ updateWeaponSway() {
         mesh.isPickable = true;
 
         this.inventory[this.selectedSlot] = null;
-}
+    }
+
+    onLeftClick() {
+        const activeItem = this.getActiveItem(); 
+        if (activeItem && activeItem.animations) {
+            activeItem.animations.forEach(anim => {
+                anim.start(true, 1.0, anim.from, anim.to, false); 
+            });
+        }
+    }
+
+    getPosition(){
+        return this.camera.position.clone();
+    }
 }
