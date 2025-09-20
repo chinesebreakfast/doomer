@@ -4,11 +4,7 @@ const engine = new BABYLON.Engine(canvas, true, {
 
 const enemies   = [];
 const players   = [];
-const itemTypes = {
-    "rifle": {model: "rifle.glb", gun: true, damage: 2, texture: false},
-    "tool":  {model: "tool.glb", gun: false, damage: 1, texture: false},
-    "gauntlet": {model: "gauntlet.glb", gun: false, damage: 3, texture: false}
-};
+
 
 function cursorShow(ui, scene){
     // Курсор
@@ -112,38 +108,17 @@ async function createEnvironment(scene, shadowGenerator){
     angel.meshes[0].rotation = new BABYLON.Vector3(0, Math.PI/4, 0);
 }
 
-function spawnItem(type, position, scale, scene, shadowGenerator) {
-    const props = itemTypes[type];
-    BABYLON.SceneLoader.ImportMeshAsync("", "./public/models/items/", props.model, scene)
-        .then(result => {
-            const mesh = result.meshes[0];
-            mesh.position = position.clone();
-            mesh.isPickable = true;
-            mesh.itemProps = props; // сохраняем свойства прямо в меш
-            mesh.scaling = new BABYLON.Vector3(scale, scale, scale);
-            mesh.checkCollisions = true;
-            mesh.animations = [];
-            shadowGenerator.addShadowCaster(mesh);
-            if(props.texture){
-                const material = new BABYLON.StandardMaterial(
-                    type + "_mat", scene);
-                const tex = new BABYLON.Texture(
-                    "./public/models/items/" + type + ".png", scene);
-                material.backFaceCulling = false;
-                material.diffuseTexture = tex;
-                mesh.material = material; 
-            }
-            if(result.animationGroups && result.animationGroups.length > 0){
-                mesh.animations = result.animationGroups;
-                mesh.animations[0].play(false);
-            }
-        });
-}
 
-async function createItems(scene, shadowGenerator){
-    spawnItem("rifle", new BABYLON.Vector3(10, 3, 5), 1, scene, shadowGenerator);
-    spawnItem("tool", new BABYLON.Vector3(5, 3, 5), 1, scene, shadowGenerator);
-    spawnItem("gauntlet", new BABYLON.Vector3(1, 3, 5), 1, scene, shadowGenerator);
+
+async function createItems(scene){
+    const rifle = new Item(scene, {
+        type: "rifle", 
+        position: new BABYLON.Vector3(10, 3, 5),
+        scale: 1
+    });
+    rifle.spawnItem();
+    //spawnItem("tool", new BABYLON.Vector3(5, 3, 5), 1, scene);
+    //spawnItem("gauntlet", new BABYLON.Vector3(1, 3, 5), 1, scene);
 }
 
 
