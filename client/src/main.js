@@ -113,12 +113,27 @@ async function createEnvironment(scene, shadowGenerator){
 async function createItems(scene){
     const rifle = new Item(scene, {
         type: "rifle", 
-        position: new BABYLON.Vector3(10, 3, 5),
+        position: new BABYLON.Vector3(10, 2, 5),
         scale: 1
     });
-    rifle.spawnItem();
-    //spawnItem("tool", new BABYLON.Vector3(5, 3, 5), 1, scene);
-    //spawnItem("gauntlet", new BABYLON.Vector3(1, 3, 5), 1, scene);
+    
+    try {
+        const riflemesh = await rifle.spawnItem();
+    } catch (error) {
+        console.error("Ошибка создания предмета:", error);
+    }
+
+    const tool = new Item(scene, {
+        type: "tool", 
+        position: new BABYLON.Vector3(30, 2, 5),
+        scale: 1
+    });
+    
+    try {
+        const toolmesh = await tool.spawnItem();
+    } catch (error) {
+        console.error("Ошибка создания предмета:", error);
+    }
 }
 
 
@@ -127,7 +142,7 @@ const createScene = function () {
     const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     ui.rootContainer.isPointerBlocker = false;
     scene.preventDefaultOnPointerDown = false;
-    scene.collisionsEnabled = true;
+    
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
     const player = new Player(scene, canvas, ui);
     players.push(player);
@@ -135,31 +150,21 @@ const createScene = function () {
         x: 1, y: 5, z: 1
     }, engine.getRenderHeight(), engine.getRenderWidth());
     player.createHealthUI();
+    window.player = player;
     const fps = 60;
     const gravity = -9.81;
     scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
-    
-    //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
-    enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
+    scene.collisionsEnabled = true;
 
-    scene.onPointerObservable.add((pointerInfo) => {
-        switch (pointerInfo.type) {
-            case BABYLON.PointerEventTypes.POINTERDOWN:
-                if (pointerInfo.event.button === 0) {
-                    const ball = BABYLON.MeshBuilder.CreateSphere("sphere", {
-                        diameter: 0.2
-                    }, scene);
-                    ball.position = player.getPosition();
-                }
-                break;
-        }
-    }, BABYLON.PointerEventTypes.POINTERDOWN);
+    //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
+    //enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
     
     const sun = new BABYLON.DirectionalLight("sun", 
         new BABYLON.Vector3(-1, -2, -1), scene);1
     sun.intensity = 1.2;
     sun.position = new BABYLON.Vector3(50, 100, 50);
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, sun);
+    
     cursorShow(ui, scene);  
     createEnvironment(scene, shadowGenerator);
     createItems(scene, shadowGenerator);
@@ -185,10 +190,8 @@ engine.runRenderLoop(()=> {
     scene.render()
 });
 
-
-
 window.addEventListener("resize", () => {
-    this.engine.resize();
+    engine.resize();
 });
 
 canvas.addEventListener("click", () => {

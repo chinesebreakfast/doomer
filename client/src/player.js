@@ -28,6 +28,7 @@ BABYLON.Effect.ShadersStore["pixelateFragmentShader"] = `
 `;
 
 class Player {
+
     constructor(scene, canvas, gui) {
         this.scene = scene;
         this.canvas = this.scene.getEngine().getRenderingCanvas();
@@ -41,25 +42,48 @@ class Player {
         this.inventory = [null, null];
         this.selectedSlot = 0;
         this.pickDistance = 3;
-        this.pickKey = "KeyE";
-        this.throwKey = "KeyQ";
         this.slotOffsetY = 0.3;
         this.slotLiftTime = 200; 
+        this.isSwitchingSlot = false;
+
+        this.itemContainers = [];
+        this.moving = false;
 
         // Для head bob
-        this.bobAmplitude = 0.05;  // амплитуда
-        this.bobFrequency = 10;    // частота
-        this.bobTime = 0;          // внутренний таймер
-        this.prevPosition = null;   // для вычисления скорости
-        this.baseHeight = 2;
+        this.bobAmplitude = 0.08;    // Сила покачивания (можно настроить)
+        this.bobFrequency = 12;      // Скорость покачивания (можно настроить)
+        this.bobTime = 0;
+        this.baseHeight = 2;         // Базовая высота камеры
+        this.prevPosition = null;
+
         this.keysPressed = { w: false, a: false, s: false, d: false };
+        this.moving = this.keysPressed.w || this.keysPressed.a || 
+                 this.keysPressed.s || this.keysPressed.d;
+   
         this.setupControls();
+        this.setupGameLoop();
 
         this.handsPositions = [
             new BABYLON.Vector3(0.5, -0.5, 2), // слот 0
             new BABYLON.Vector3(-0.5, -0.5, 2) // слот 1
         ];
+        
     }
+
+    setupGameLoop(){
+        this.scene.onBeforeRenderObservable.add(() => {
+            this.updateBob();
+            this.updateWeaponSway();
+            this.update();
+        });
+    }
+
+    update(){
+        this.moving = this.keysPressed.w || this.keysPressed.a || 
+                 this.keysPressed.s || this.keysPressed.d;
+        this.handleActions();
+    }
+
     createHealthUI(){
         this.healthUI = [];
 
@@ -96,21 +120,20 @@ class Player {
         this.updateHealthUI();
     }
     setupControls() {
-        this.canvas.tabIndex = 0; // чтобы canvas мог получать фокус
-        this.canvas.focus();
-
-        this.canvas.addEventListener("keydown", (e) => {
+        console.log("SETUP CONTROLS");
+        // Простые обработчики
+        document.addEventListener("keydown", (e) => {
             switch (e.code) {
                 case "KeyW": this.keysPressed.w = true; break;
                 case "KeyA": this.keysPressed.a = true; break;
                 case "KeyS": this.keysPressed.s = true; break;
                 case "KeyD": this.keysPressed.d = true; break;
-                case "KeyE": this.tryPickup(); break;
+                case "KeyE": this.tryPickup(); break; // Прямой вызов!
                 case "KeyQ": this.throwItem(); break;
             }
         });
 
-        this.canvas.addEventListener("keyup", (e) => {
+        document.addEventListener("keyup", (e) => {
             switch (e.code) {
                 case "KeyW": this.keysPressed.w = false; break;
                 case "KeyA": this.keysPressed.a = false; break;
@@ -119,14 +142,15 @@ class Player {
             }
         });
 
+        // Колесико мыши
         this.canvas.addEventListener("wheel", (e) => {
             if (e.deltaY > 0) this.changeSlot(1);
             else this.changeSlot(-1);
         });
     }
 
-    isMoving() {
-        return this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d;
+    handleActions() {
+        // Для действий, которые нужно обрабатывать в цикле
     }
         
     CreateController(position, height, width){
@@ -163,99 +187,167 @@ class Player {
 
         this.camera.angularSensibility = 1000;
         this.prevPosition = this.camera.position.clone();
-        this.scene.onBeforeRenderObservable.add(() => {
-            this.updateBob();
-            this.updateWeaponSway();
-        });
     }
-
     updateWeaponSway() {
+        // Проверяем движется ли игрок
+        const isMoving = this.keysPressed.w || this.keysPressed.a || 
+                        this.keysPressed.s || this.keysPressed.d;
+
+        if (!isMoving) return;
+
         const time = performance.now() * 0.002;
 
-        this.inventory.forEach((mesh, i) => {
-            if (!mesh) return;
+        // Проверяем что itemContainers существует
+        if (!this.itemContainers) return;
 
-            // Базовая позиция слота
-            const base = this.handsPositions[i].clone();
-
-            // Если слот выбран, поднимаем оружие
-            if (i === this.selectedSlot) {
-                base.y += this.slotLift;
-            }
-
-            // Проверяем движение
-            const moving = this.keysPressed && (this.keysPressed.w || this.keysPressed.a || this.keysPressed.s || this.keysPressed.d);
-
-            if (moving) {
-                const swayX = Math.sin(time * 2) * 0.05;
-                const swayY = Math.cos(time * 4) * 0.03;
-
-                mesh.position.x = base.x + swayX;
-                mesh.position.y = base.y + swayY;
-                mesh.position.z = base.z;
-
-                // Лёгкий наклон
-                mesh.rotation.z = Math.sin(time * 2) * 0.02;
-                mesh.rotation.x = Math.cos(time * 2) * 0.01;
-            } else {
-                // Стоим на месте — оружие в базовой позиции
-                mesh.position.copyFrom(base);
-                mesh.rotation.set(0, 0, 0);
-            }
+        this.inventory.forEach((item, slotIndex) => {
+            // Проверяем все условия
+            if (!item || !this.itemContainers[slotIndex]) return;
+            
+            const container = this.itemContainers[slotIndex];
+            if (!container) return;
+            
+            // Простое покачивание
+            container.position.y += Math.cos(time * 5) * 0.01;
+            container.rotation.z = Math.sin(time * 3) * 0.01;
         });
     }
 
     updateBob() {
-        if (!this.prevPosition) return;
+        if (!this.camera) return; // ← ДОБАВЬТЕ ПРОВЕРКУ КАМЕРЫ
+        
+        if (!this.prevPosition) {
+            this.prevPosition = this.camera.position.clone();
+            return;
+        }
 
-        // Вычисляем скорость движения игрока
-        //const delta = this.camera.position.subtract(this.prevPosition);
-        //const speed = delta.length();
+        const isMoving = this.keysPressed.w || this.keysPressed.a || 
+                        this.keysPressed.s || this.keysPressed.d;
 
-        if (this.isMoving) { // движется
+        if (isMoving) {
+            // Простое вертикальное покачивание
             this.bobTime += this.scene.getEngine().getDeltaTime() / 1000 * this.bobFrequency;
             this.camera.position.y = this.baseHeight + Math.sin(this.bobTime) * this.bobAmplitude;
-        } else { // стоит на месте
-            this.bobTime = 0;
+        } else {
+            // Мгновенный возврат к нормальной высоте
             this.camera.position.y = this.baseHeight;
+            this.bobTime = 0;
         }
 
         this.prevPosition.copyFrom(this.camera.position);
     }
 
-    addItem(mesh){
-        for(let i=0; i < this.inventory.length; i++){
-            if(!this.inventory[i]){
-                this.inventory[i] = mesh;
-                this.attachToCamera(mesh, i);
-                break;
+    addItem(item){
+        console.log("add Item", item?.type);
+        if(!item)
+        {
+            console.log("Нет предмета");
+            return false;
+        }
+        // Пробуем добавить в выбранный слот сначала
+        if (!this.inventory[this.selectedSlot]) {
+            this.inventory[this.selectedSlot] = item;
+            console.log("✅ Предмет добавлен в выбранный слот", this.selectedSlot);
+            
+            if (item.model) {
+                this.attachToCamera(item.model, this.selectedSlot);
+            }
+            return true;
+        }
+
+        // Если выбранный слот занят, ищем любой свободный
+        for (let i = 0; i < this.inventory.length; i++) {
+            if (!this.inventory[i]) {
+                this.inventory[i] = item;
+                console.log("✅ Предмет добавлен в свободный слот", i);
+                
+                if (item.model) {
+                    this.attachToCamera(item.model, i);
+                }
+                return true;
             }
         }
-        return false;
+        console.log("Инвентарь полон");
+        return false;  
     }
 
     tryPickup() {
-        const ray = new BABYLON.Ray(this.camera.position, this.camera.getForwardRay().direction, this.pickDistance);
-        const hit = this.scene.pickWithRay(ray, (mesh) => mesh.isPickable);
-        if (hit && hit.pickedMesh) {
-            this.addItem(hit.pickedMesh);
+        console.log("🔍 Поиск предметов по расстоянию");
+        
+        const playerPos = this.camera.position;
+        const maxDistance = 5; // Максимальная дистанция подбора
+        let closestItem = null;
+        let minDistance = Infinity;
+
+        // Ищем все предметы на сцене
+        this.scene.meshes.forEach(mesh => {
+            if (mesh.itemInstance && mesh.isPickable && mesh.isEnabled()) {
+                const distance = BABYLON.Vector3.Distance(playerPos, mesh.position);
+                
+                console.log(`📦 ${mesh.name}: ${distance.toFixed(2)}m`);
+                
+                // Ищем самый близкий предмет в радиусе
+                if (distance < maxDistance && distance < minDistance) {
+                    minDistance = distance;
+                    closestItem = mesh;
+                }
+            }
+        });
+
+        if (closestItem) {
+            console.log(`🎯 Подбираем: ${closestItem.name} (${minDistance.toFixed(2)}m)`);
+            this.addItem(closestItem.itemInstance);
+            closestItem.isPickable = false;
+            closestItem.setEnabled(false);
+        } else {
+            console.log("❌ Нет предметов рядом");
         }
     }
-
+    
     attachToCamera(mesh, slotIndex) {
-        mesh.parent = this.camera;
-        mesh.checkCollisions = false;
-        mesh.isPickable = false;
+        if (!mesh || !this.camera) return;
 
-        // позиция слота
-        mesh.position = slotIndex === 0
-            ? new BABYLON.Vector3(0.5, -0.5, 5)
-            : new BABYLON.Vector3(-0.5, -0.5, 2);
-        mesh.rotation = new BABYLON.Vector3(0, 0, 0);
+        const realMeshes = mesh.getDescendants(false).filter(m => m.name !== '__root__');
+        const realItemMesh = realMeshes[0] || mesh;
+
+        const container = new BABYLON.TransformNode("weapon_container", this.scene);
+        container.parent = this.camera;
         
-        // поднятие активного предмета
-        if (slotIndex === this.selectedSlot) {
-            mesh.position.y += this.slotOffsetY;
+        const itemType = mesh.itemInstance?.type;
+        const scale = itemTypes[itemType]?.scale || 1;
+
+        realItemMesh.parent = container;
+        realItemMesh.checkCollisions = false;
+        realItemMesh.position = BABYLON.Vector3.Zero();
+        realItemMesh.rotation = BABYLON.Vector3.Zero();
+        realItemMesh.scaling = new BABYLON.Vector3(scale, scale, scale);
+
+        // Позиционирование
+        if (itemType === 'tool') {
+            container.position = new BABYLON.Vector3(
+                slotIndex === 0 ? 0.7 : -0.7,
+                -2.5, // Начинаем скрытым внизу
+                2.5
+            );
+            container.rotation = new BABYLON.Vector3(
+                Math.PI/2,
+                0,
+                Math.PI/4,
+            );
+        } else {
+            container.position = new BABYLON.Vector3(
+                slotIndex === 0 ? 0.3 : -0.3,
+                -2.0, // Начинаем скрытым внизу
+                2.0
+            );
+        }
+
+        if (!this.itemContainers) this.itemContainers = [];
+        this.itemContainers[slotIndex] = container;
+
+        // Сразу скрываем если это не активный слот
+        if (slotIndex !== this.selectedSlot) {
+            this.setSlotVisibility(slotIndex, false);
         }
     }
 
@@ -264,65 +356,167 @@ class Player {
     }
 
     changeSlot(deltaY) {
-        if (!this.inventory.some(m => m)) return; // если нет предметов
+        if (!this.inventory.some(m => m) || this.isSwitchingSlot) return;
+        
+        this.isSwitchingSlot = true; // Блокируем переключение во время анимации
+        
         const oldSlot = this.selectedSlot;
-        if (deltaY > 0) this.selectedSlot = (this.selectedSlot + 1) % this.inventory.length;
-        else this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
+        if (deltaY > 0) {
+            this.selectedSlot = (this.selectedSlot + 1) % this.inventory.length;
+        } else {
+            this.selectedSlot = (this.selectedSlot - 1 + this.inventory.length) % this.inventory.length;
+        }
 
-        console.log(`Сменили слот с ${oldSlot} на ${this.selectedSlot}`);
+        console.log(`🔀 Смена слота: ${oldSlot} → ${this.selectedSlot}`);
+        
+        // Запускаем анимацию переключения
+        this.animateSlotChange(oldSlot, this.selectedSlot);
+        
+        // Разблокируем через время анимации
+        setTimeout(() => {
+            this.isSwitchingSlot = false;
+        }, 400);
     }
 
     animateSlotChange(oldSlot, newSlot) {
-        // Опускаем старый слот
-        if (this.inventory[oldSlot]) {
-            this.inventory[oldSlot].position.y -= this.slotOffsetY;
+        // 1. Скрываем старый предмет (плавно опускаем вниз)
+        if (this.inventory[oldSlot] && this.itemContainers[oldSlot]) {
+            this.hideSlot(oldSlot);
         }
 
-        // Поднимаем новый слот плавно
-        if (this.inventory[newSlot]) {
-            const mesh = this.inventory[newSlot];
-            mesh.position.y += this.slotOffsetY;
-            setTimeout(() => {
-                if (mesh) mesh.position.y -= this.slotOffsetY;
-            }, this.slotLiftTime);
+        // 2. Показываем новый предмет (плавно поднимаем снизу)
+        if (this.inventory[newSlot] && this.itemContainers[newSlot]) {
+            this.showSlot(newSlot);
         }
     }
 
-    useItem(slotIndex) {
-        const mesh = this.inventory[slotIndex];
-        if (!mesh) return;
-
-        console.log("Используем предмет:", mesh.name);
-        this.playAnimation(mesh, "Shot");
+    hideSlot(slotIndex) {
+        const container = this.itemContainers[slotIndex];
+        const targetY = -2.0; // Полностью скрыть внизу
+        
+        this.animateContainer(container,
+            container.position.x,
+            targetY,
+            container.position.z,
+            300,
+            () => {
+                // После анимации полностью скрываем
+                this.setSlotVisibility(slotIndex, false);
+            }
+        );
     }
 
-    throwItem() {
-        const mesh = this.inventory[this.selectedSlot];
-        if (!mesh) return;
+    // Показ слота (плавное поднятие снизу)
+    showSlot(slotIndex) {
+        const container = this.itemContainers[slotIndex];
+        const itemType = this.inventory[slotIndex]?.type;
+        
+        // Позиция зависит от типа предмета
+        const targetY = itemType === 'tool' ? -0.3 : -0.4;
+        
+        // Сначала показываем (но еще внизу)
+        this.setSlotVisibility(slotIndex, true);
+        container.position.y = -2.0; // Начальная позиция (внизу)
+        
+        // Плавно поднимаем к целевой позиции
+        this.animateContainer(container,
+            container.position.x,
+            targetY,
+            container.position.z,
+            400
+        );
+    }
 
-        // Снимаем с камеры
-        mesh.parent = null;
-        mesh.checkCollisions = true;
+    // Установить видимость слота
+    setSlotVisibility(slotIndex, visible) {
+        const item = this.inventory[slotIndex];
+        if (!item || !item.model || !this.itemContainers[slotIndex]) return;
 
-        // Ставим перед игроком на высоте y = 3
-        const forward = this.camera.getForwardRay().direction;
-        mesh.position = this.camera.position.add(forward.scale(3));
-        mesh.position.y = 2;
-        mesh.isPickable = true;
+        const allMeshes = item.model.getDescendants(false);
+        allMeshes.push(item.model);
+        
+        allMeshes.forEach(mesh => {
+            mesh.setEnabled(visible);
+        });
+        
+        this.itemContainers[slotIndex].setEnabled(visible);
+    }
 
+    // Плавная анимация контейнера
+    animateContainer(container, targetX, targetY, targetZ, duration, onComplete = null) {
+        const startX = container.position.x;
+        const startY = container.position.y;
+        const startZ = container.position.z;
+        
+        const startTime = Date.now();
+        const endTime = startTime + duration;
+
+        const animate = () => {
+            const currentTime = Date.now();
+            const progress = Math.min(1, (currentTime - startTime) / duration);
+            
+            // Плавная интерполяция (easeOut)
+            const ease = 1 - Math.pow(1 - progress, 3);
+            
+            container.position.x = startX + (targetX - startX) * ease;
+            container.position.y = startY + (targetY - startY) * ease;
+            container.position.z = startZ + (targetZ - startZ) * ease;
+
+            if (currentTime < endTime) {
+                requestAnimationFrame(animate);
+            } else if (onComplete) {
+                onComplete();
+            }
+        };
+
+        animate();
+    }
+
+    useItem() {
+        const activeItem = this.getActiveItem();
+        if (activeItem && activeItem.model){
+            console.log("Используем предмет:", activeItem);
+            activeItem.playAnimation("Shot");
+        }
+    }
+    async throwItem() {
+        const item = this.inventory[this.selectedSlot];
+        if (!item) return;
+
+        const itemType = item.type;
+        
+        // 1. Очищаем инвентарь
         this.inventory[this.selectedSlot] = null;
-    }
-
-    onLeftClick() {
-        const activeItem = this.getActiveItem(); 
-        if (activeItem && activeItem.animations) {
-            activeItem.animations.forEach(anim => {
-                anim.start(true, 1.0, anim.from, anim.to, false); 
-            });
+        
+        // 2. Удаляем визуальную часть
+        if (item.model) {
+            item.model.dispose();
         }
+        if (this.itemContainers && this.itemContainers[this.selectedSlot]) {
+            this.itemContainers[this.selectedSlot].dispose();
+            this.itemContainers[this.selectedSlot] = null;
+        }
+
+        // 3. Создаем новый предмет на земле
+        const dropPosition = this.camera.position.add(
+            this.camera.getForwardRay().direction.scale(2.5)
+        );
+        dropPosition.y = 1.0;
+
+        const newItem = new Item(this.scene, {
+            type: itemType,
+            position: dropPosition,
+            scale: itemTypes[itemType]?.originalScale || 1
+        });
+
+        await newItem.spawnItem();
+        console.log(`🎯 ${itemType} создан на земле`);
     }
 
     getPosition(){
         return this.camera.position.clone();
     }
 }
+
+
+
