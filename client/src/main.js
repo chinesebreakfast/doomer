@@ -1,13 +1,192 @@
 const canvas = document.getElementById("game-canvas");
-const engine = new BABYLON.Engine(canvas, true, {
-    stencil: true }, true);
+const engine = new BABYLON.Engine(canvas, true, { stencil: true }, true);
 
-const enemies   = [];
-const players   = [];
+const enemies = [];
+const players = [];
 
-const initSky = (scene) => {
-    console.log("Инициализируем небо и освещение...");
+// Минимальная обработка материалов
+function processMaterials(meshes, scene) {
+    meshes.forEach(mesh => {
+        if (mesh.material) {
+            mesh.material.backFaceCulling = false;
+            
+            if (mesh.name.toLowerCase().includes('bottom')) {
+                mesh.material.alpha = 1.0;
+                if (mesh.material.getClassName() === "PBRMaterial") {
+                    mesh.material.transparencyMode = BABYLON.PBRMaterial.PBRMATERIAL_OPAQUE;
+                }
+            }
+            
+            if (mesh.material.getClassName() === "PBRMaterial") {
+                const pbr = mesh.material;
+                pbr.metallic = 0.0;
+                pbr.roughness = 0.8;
+                pbr.environmentIntensity = 0.8;
+                
+                // Улучшение для светящихся материалов
+                if (mesh.name.toLowerCase().includes('light') || 
+                    mesh.name.toLowerCase().includes('bulb') || 
+                    mesh.name.toLowerCase().includes('flame')) {
+                    pbr.emissiveIntensity = 3.0;
+                    pbr.useEmissiveAsIllumination = true;
+                }
+            }
+            
+            mesh.material.markAsDirty();
+        }
+    });
+}
+
+// Функция загрузки уровня
+const loadLevel = async (scene) => {
+    console.log("Загрузка уровня...");
     
+    try {
+        const result = await BABYLON.SceneLoader.ImportMeshAsync(
+            "", "./public/models/city/", "massivee.glb", scene
+        );
+        
+        console.log("Модель загружена, мешей:", result.meshes.length);
+        
+        // Обрабатываем материалы
+        processMaterials(result.meshes, scene);
+        assignMaterialsByName(result.meshes, scene);
+        // Создаем контейнер и настраиваем меши
+        const modelContainer = new BABYLON.TransformNode("levelContainer", scene);
+        result.meshes.forEach(mesh => {
+            if (mesh.parent === null) {
+                mesh.checkCollisions = true;
+                mesh.collisionsEnabled = true;
+                mesh.parent = modelContainer;
+            }else{
+                mesh.checkCollisions = true;
+                mesh.collisionsEnabled = true;
+            }
+        });
+        
+        // Масштабируем
+        const scaleFactor = 5;
+        modelContainer.scaling = new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor);
+
+        return { ...result, container: modelContainer };
+        
+    } catch (error) {
+        console.error("Ошибка загрузки:", error);
+        throw error;
+    }
+};
+
+const createSkyboxFromSingleTexture = (scene) => {
+    const skySphere = BABYLON.Mesh.CreateSphere("skySphere", 32, 1000, scene);
+    skySphere.infiniteDistance = true;
+    
+    const skyMaterial = new BABYLON.StandardMaterial("skyMaterial", scene);
+    skyMaterial.backFaceCulling = false;
+    skyMaterial.disableLighting = true;
+    
+    const panoramaTexture = new BABYLON.Texture("./public/sky/2.png", scene);
+    skyMaterial.diffuseTexture = panoramaTexture;
+    skyMaterial.diffuseTexture.coordinatesMode = BABYLON.Texture.FIXED_EQUIRECTANGULAR_MODE;
+    skyMaterial.diffuseTexture.wAng = Math.PI;
+    
+    skyMaterial.emissiveTexture = panoramaTexture;
+    skyMaterial.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    skyMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    skyMaterial.alpha = 1;
+    
+    skySphere.material = skyMaterial;
+    return skySphere;
+};
+
+const setupLight = (scene) => {
+    console.log("Настраиваем улучшенное освещение...");
+    
+    // Основной направленный свет (солнце)
+    const mainLight = new BABYLON.DirectionalLight(
+        "mainLight", 
+        new BABYLON.Vector3(-0.8, -1, -0.4), 
+        scene
+    );
+    mainLight.intensity = 1.2;
+    mainLight.diffuse = new BABYLON.Color3(1.0, 0.95, 0.85); // Теплый белый
+    mainLight.specular = new BABYLON.Color3(1.0, 0.95, 0.85);
+    mainLight.position = new BABYLON.Vector3(30, 50, 30);
+    
+    // Окружающее освещение
+    const ambientLight = new BABYLON.HemisphericLight(
+        "ambientLight", 
+        new BABYLON.Vector3(0, 1, 0), 
+        scene
+    );
+    ambientLight.intensity = 0.5;
+    ambientLight.diffuse = new BABYLON.Color3(0.4, 0.4, 0.5);
+    ambientLight.groundColor = new BABYLON.Color3(0.2, 0.2, 0.3);
+
+    // Дополнительный заполняющий свет
+    const fillLight = new BABYLON.DirectionalLight(
+        "fillLight", 
+        new BABYLON.Vector3(0.5, -0.5, 0.5), 
+        scene
+    );
+    fillLight.intensity = 0.3;
+    fillLight.diffuse = new BABYLON.Color3(0.8, 0.8, 0.9);  
+    // Легкая постобработка для улучшения контраста
+    scene.imageProcessingConfiguration.contrast = 1.2;
+    scene.imageProcessingConfiguration.exposure = 1.1;
+    
+    return { ambientLight, mainLight, fillLight };
+};
+
+function setupFog(scene) {
+    // Настраиваем легкий туман который не перекрывает скайбокс
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+    scene.fogDensity = 0.006; // Легкая плотность
+    scene.fogColor = new BABYLON.Color3(0.1, 0.3, 0.1);
+    
+    // Отключаем туман для скайбокса (если он есть)
+    if (scene.skybox) {
+        scene.skybox.material.fogEnabled = false;
+    }
+    
+    console.log("Легкий туман настроен, скайбокс виден");
+}
+
+function assignMaterialsByName(meshes, scene) {
+    const textures = {
+        'bricks1': 'brick_1.jpg',
+        'bricks2': 'bricks_2.jpg', 
+        'steel': 'metal_2.jpg',
+        'stoneee': 'stone.jpg'
+    };
+    console.log("Назначаем материалы для примитивов...");
+
+    meshes.forEach(mesh => {
+        const meshName = mesh.name;
+        let textureAssigned = false;
+        
+        for (const [key, textureName] of Object.entries(textures)) {
+            if (meshName.includes(key)) {
+                const material = new BABYLON.StandardMaterial(`${key}_mat`, scene);
+                
+                try {
+                    material.diffuseTexture = new BABYLON.Texture(
+                        `./public/models/city/textures/${textureName}`, 
+                        scene
+                    );
+                } catch (e) {
+                    material.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                }
+                
+                mesh.material = material;
+                textureAssigned = true;
+                break;
+            }
+        }
+    });
+}
+
+// Инициализация неба и освещения
+const initSky = (scene) => {
     try {
         // Сначала освещение
         const lights = setupLight(scene);
@@ -20,180 +199,10 @@ const initSky = (scene) => {
     } catch (error) {
         console.error("Ошибка при создании неба:", error);
         // Fallback: простое цветное небо
-        scene.clearColor = new BABYLON.Color4(0.1, 0.05, 0.15, 1.0);
         const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
         return { skybox: null, lights: light };
     }
 };
-
-const createSkyboxFromSingleTexture = (scene) => {
-    console.log("Создаем небо из панорамной текстуры...");
-    
-    // Создаем сферу для неба
-    const skySphere = BABYLON.Mesh.CreateSphere("skySphere", 32, 1000, scene);
-    skySphere.infiniteDistance = true;
-    
-    // Создаем материал для неба
-    const skyMaterial = new BABYLON.StandardMaterial("skyMaterial", scene);
-    skyMaterial.backFaceCulling = false;
-    skyMaterial.disableLighting = true; // Важно: отключаем освещение для неба
-    
-    // Загружаем вашу панорамную текстуру
-    const panoramaTexture = new BABYLON.Texture("./public/sky/2.png", scene);
-    
-    // Настройка текстуры для панорамного отображения
-    skyMaterial.diffuseTexture = panoramaTexture;
-    skyMaterial.diffuseTexture.coordinatesMode = BABYLON.Texture.FIXED_EQUIRECTANGULAR_MODE;
-    skyMaterial.diffuseTexture.wAng = Math.PI; // Поворот на 180 градусов если нужно
-    
-    // Делаем текстуру emissive (светящейся) чтобы небо было ярким
-    skyMaterial.emissiveTexture = panoramaTexture;
-    skyMaterial.emissiveColor = new BABYLON.Color3(1, 1, 1);
-    
-    // Отключаем все эффекты которые могут мешать
-    skyMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
-    skyMaterial.alpha = 1;
-    
-    skySphere.material = skyMaterial;
-    
-    console.log("Небо создано, текстура:", "./public/sky/2.png");
-    return skySphere;
-};
-
-const setupLight = (scene) => {
-    console.log("Настраиваем освещение...");
-    
-    // Темный фон для контраста с небом
-    scene.clearColor = new BABYLON.Color4(0.05, 0.02, 0.08, 1.0);
-    
-    // Мягкое окружающее освещение
-    const ambientLight = new BABYLON.HemisphericLight(
-        "ambientLight", 
-        new BABYLON.Vector3(0, 1, 0), 
-        scene
-    );
-    ambientLight.intensity = 0.4;
-    ambientLight.diffuse = new BABYLON.Color3(0.3, 0.2, 0.4);
-    ambientLight.groundColor = new BABYLON.Color3(0.1, 0.15, 0.2);
-    
-    // Основной направленный свет
-    const mainLight = new BABYLON.DirectionalLight(
-        "mainLight", 
-        new BABYLON.Vector3(-0.5, -1, -0.3), 
-        scene
-    );
-    mainLight.intensity = 0.7;
-    mainLight.diffuse = new BABYLON.Color3(0.8, 0.7, 0.6);
-    mainLight.position = new BABYLON.Vector3(30, 50, 30);
-
-    scene.fogMode = BABYLON.Scene.FOGMODE_EXP2; // Плавный туман
-    scene.fogDensity = 0.002; // Плотность тумана (можно настроить)
-    scene.fogColor = new BABYLON.Color3(0.1, 0.3, 0.1); // ЗЕЛЕНЫЙ цвет тумана
-    
-    return { ambientLight, mainLight };
-};
-
-function cursorShow(ui, scene){
-    // Курсор
-    const cursor = new BABYLON.GUI.Image("cursor", "./public/cursor.png");
-    cursor.width = "64px";
-    cursor.height = "64px";
-    cursor.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
-    cursor.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
-    ui.addControl(cursor);
-
-    // Параметры покачивания
-    const amplitude = 5; // пиксели
-    const frequency = 2; // колебаний в секунду
-    let time = 0;
-
-    scene.onBeforeRenderObservable.add(() => {
-        const deltaTime = scene.getEngine().getDeltaTime() / 1000;
-        time += deltaTime;
-
-        // Синусоидальное смещение
-        cursor.left = Math.sin(time * frequency * 2 * Math.PI) * amplitude;
-        cursor.top = Math.cos(time * frequency * 2 * Math.PI) * amplitude;
-    });
-}
-
-async function createEnvironment(scene){
-
-    const steelpipes = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
-    {
-        position: new BABYLON.Vector3(-72, 3, 7),
-        size: 4.5,
-        alpha: 1,
-        rotation: new BABYLON.Vector3(0, Math.PI/2, 0)
-    });
-    const steelpipes2 = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
-    {
-        position: new BABYLON.Vector3(-72, 3, 12),
-        size: 4.5,
-        alpha: 1,
-        rotation: new BABYLON.Vector3(0, Math.PI/2, 0)
-    });
-
-    const hand = new AlphaSprite(scene, ["./public/sprites/handmin.png"], 
-    {
-        position: new BABYLON.Vector3(-72.7, 3, 12),
-        size: 3,
-        alpha: 1,
-        rotation: new BABYLON.Vector3(0, -Math.PI/2, Math.PI/2)
-    });
-    const hand2 = new AlphaSprite(scene, ["./public/sprites/handmin.png"], 
-    {
-        position: new BABYLON.Vector3(-72.7, 3, 7.5),
-        size: 3,
-        alpha: 1,
-        rotation: new BABYLON.Vector3(0, -Math.PI/2, Math.PI/2)
-    });
-
-    const ground = BABYLON.MeshBuilder.CreateGround("ground", {
-        width: 1000,
-        height: 1000
-    }, scene);
-
-    ground.checkCollisions = true;
-    ground.receiveShadows = true;
-
-    const groundMat = new BABYLON.StandardMaterial("groundMaterial", scene);
-    const groundTexture = new BABYLON.Texture("./public/image.png", scene);
-    groundTexture.uScale = 100;
-    groundTexture.vScale = 100;
-    groundMat.diffuseTexture = groundTexture;
-    groundTexture.wrapU = BABYLON.Texture.WRAP_ADDRESSMODE;
-    groundTexture.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
-    ground.material = groundMat;
-
-    const meshes ={};
-
-    const shop = await BABYLON.SceneLoader.ImportMeshAsync(
-        "",
-        "./public/models/city/",
-        "house.glb", scene
-    );
-    shop.meshes[0].checkCollisions = true;
-    shop.meshes[0].scaling = new BABYLON.Vector3(3.7, 3.7, 3.7);
-    shop.meshes[0].position = new BABYLON.Vector3(-75, 0, 10);
-    shop.meshes[0].rotation = new BABYLON.Vector3(0, 0, 0);
-    const collider = BABYLON.MeshBuilder.CreateBox("collider", 
-        {width:12, height:15, depth:14}, scene);
-    collider.position = shop.meshes[0].position.clone();
-    collider.position.z -= 2;
-    collider.isVisible = false;
-    collider.checkCollisions = true;
-
-    const angel = await BABYLON.SceneLoader.ImportMeshAsync(
-        "",
-        "./public/models/city/",
-        "angel.glb", scene
-    );
-    angel.meshes[0].checkCollisions = true;
-    angel.meshes[0].scaling = new BABYLON.Vector3(5, 5, 5);
-    angel.meshes[0].position = new BABYLON.Vector3(-100, 0, 200);
-    angel.meshes[0].rotation = new BABYLON.Vector3(0, Math.PI/4, 0);
-}
 
 async function createItems(scene){
     //RIFLE
@@ -231,68 +240,75 @@ async function createItems(scene){
     }
 }
 
+// Курсор
+function cursorShow(ui, scene) {
+    const cursor = new BABYLON.GUI.Image("cursor", "./public/cursor.png");
+    cursor.width = "64px";
+    cursor.height = "64px";
+    cursor.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+    cursor.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+    ui.addControl(cursor);
 
+    let time = 0;
+    scene.onBeforeRenderObservable.add(() => {
+        const deltaTime = scene.getEngine().getDeltaTime() / 1000;
+        time += deltaTime;
+        cursor.left = Math.sin(time * 2 * 2 * Math.PI) * 5;
+        cursor.top = Math.cos(time * 2 * 2 * Math.PI) * 5;
+    });
+}
+
+// Создание окружения
+async function createEnvironment(scene) {
+    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 1000, height: 1000 }, scene);
+    ground.checkCollisions = true;
+    
+    const groundMat = new BABYLON.StandardMaterial("groundMaterial", scene);
+    const groundTexture = new BABYLON.Texture("./public/image.png", scene);
+    groundTexture.uScale = 100;
+    groundTexture.vScale = 100;
+    groundMat.diffuseTexture = groundTexture;
+    ground.material = groundMat;
+}
+
+// Создание сцены
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
     const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     ui.rootContainer.isPointerBlocker = false;
     scene.preventDefaultOnPointerDown = false;
-    scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    scene.clearColor = new BABYLON.Color4(0.05, 0.02, 0.08, 1.0);
+     setupFog(scene);
+    // Загрузка уровня
+    loadLevel(scene);
+
+    // Инициализация
     initSky(scene);
     const player = new Player(scene, canvas, ui);
     players.push(player);
-    player.CreateController({
-        x: 1, y: 5, z: 1
-    }, engine.getRenderHeight(), engine.getRenderWidth());
+    player.CreateController({ x: 1, y: 5, z: 1 }, engine.getRenderHeight(), engine.getRenderWidth());
     player.createUI();
     window.player = player;
-    const fps = 60;
-    const gravity = -9.81;
-    scene.gravity = new BABYLON.Vector3(0, gravity / fps, 0);
+    
+    // Физика
+    scene.gravity = new BABYLON.Vector3(0, -9.81 / 60, 0);
     scene.collisionsEnabled = true;
 
-    //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
-    //enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
-
-    
+    // Дополнительные элементы
     cursorShow(ui, scene);  
     createEnvironment(scene);
     createItems(scene);
 
-
+    // Обработчики событий
     scene.onPointerDown = (evt) => {
-        if (evt.button === 0)  scene.getEngine().enterPointerlock();
-        if (evt.button === 1)  scene.getEngine().exitPointerlock();
+        if (evt.button === 0) scene.getEngine().enterPointerlock();
+        if (evt.button === 1) scene.getEngine().exitPointerlock();
     };
-    scene.onBeforeRenderObservable.add(() => {
-        enemies.forEach(enemy => enemy.update(players));
-    });
 
     return scene;
 };
 
-
-
-// Инициализация всей сцены
-
-
-const scene = createScene();
-engine.runRenderLoop(()=> {
-    scene.render()
-});
-
-window.addEventListener("resize", () => {
-    engine.resize();
-});
-
-canvas.addEventListener("click", () => {
-    if (canvas.requestPointerLock) {
-        canvas.requestPointerLock();
-    } else if (canvas.msRequestPointerLock) {
-        canvas.msRequestPointerLock();
-    } else if (canvas.mozRequestPointerLock) {
-        canvas.mozRequestPointerLock();
-    } else if (canvas.webkitRequestPointerLock) {
-        canvas.webkitRequestPointerLock();
-    }
-});
+// Инициализация
+let mainScene = createScene();
+engine.runRenderLoop(() => mainScene.render());
+window.addEventListener("resize", () => engine.resize());
