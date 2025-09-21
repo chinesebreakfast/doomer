@@ -37,7 +37,11 @@ class Player {
 
         this.health = 3;
         this.maxHealth = 3;
+
+        //UI
         this.healtUI = null;
+        this.ciggsUI = null;
+        this.ciggsText = null;
 
         this.inventory = [null, null];
         this.selectedSlot = 0;
@@ -82,6 +86,15 @@ class Player {
         this.moving = this.keysPressed.w || this.keysPressed.a || 
                  this.keysPressed.s || this.keysPressed.d;
         this.handleActions();
+    }
+
+    createUI(){
+        this.createHealthUI();
+        this.createCiggsUI();
+    }
+
+    createCiggsUI(){
+        
     }
 
     createHealthUI(){

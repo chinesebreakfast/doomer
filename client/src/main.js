@@ -5,6 +5,93 @@ const engine = new BABYLON.Engine(canvas, true, {
 const enemies   = [];
 const players   = [];
 
+const initSky = (scene) => {
+    console.log("Инициализируем небо и освещение...");
+    
+    try {
+        // Сначала освещение
+        const lights = setupLight(scene);
+        
+        // Затем небо
+        const skybox = createSkyboxFromSingleTexture(scene);
+        
+        console.log("Небо и освещение успешно созданы!");
+        return { skybox, lights };
+    } catch (error) {
+        console.error("Ошибка при создании неба:", error);
+        // Fallback: простое цветное небо
+        scene.clearColor = new BABYLON.Color4(0.1, 0.05, 0.15, 1.0);
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+        return { skybox: null, lights: light };
+    }
+};
+
+const createSkyboxFromSingleTexture = (scene) => {
+    console.log("Создаем небо из панорамной текстуры...");
+    
+    // Создаем сферу для неба
+    const skySphere = BABYLON.Mesh.CreateSphere("skySphere", 32, 1000, scene);
+    skySphere.infiniteDistance = true;
+    
+    // Создаем материал для неба
+    const skyMaterial = new BABYLON.StandardMaterial("skyMaterial", scene);
+    skyMaterial.backFaceCulling = false;
+    skyMaterial.disableLighting = true; // Важно: отключаем освещение для неба
+    
+    // Загружаем вашу панорамную текстуру
+    const panoramaTexture = new BABYLON.Texture("./public/sky/2.png", scene);
+    
+    // Настройка текстуры для панорамного отображения
+    skyMaterial.diffuseTexture = panoramaTexture;
+    skyMaterial.diffuseTexture.coordinatesMode = BABYLON.Texture.FIXED_EQUIRECTANGULAR_MODE;
+    skyMaterial.diffuseTexture.wAng = Math.PI; // Поворот на 180 градусов если нужно
+    
+    // Делаем текстуру emissive (светящейся) чтобы небо было ярким
+    skyMaterial.emissiveTexture = panoramaTexture;
+    skyMaterial.emissiveColor = new BABYLON.Color3(1, 1, 1);
+    
+    // Отключаем все эффекты которые могут мешать
+    skyMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    skyMaterial.alpha = 1;
+    
+    skySphere.material = skyMaterial;
+    
+    console.log("Небо создано, текстура:", "./public/sky/2.png");
+    return skySphere;
+};
+
+const setupLight = (scene) => {
+    console.log("Настраиваем освещение...");
+    
+    // Темный фон для контраста с небом
+    scene.clearColor = new BABYLON.Color4(0.05, 0.02, 0.08, 1.0);
+    
+    // Мягкое окружающее освещение
+    const ambientLight = new BABYLON.HemisphericLight(
+        "ambientLight", 
+        new BABYLON.Vector3(0, 1, 0), 
+        scene
+    );
+    ambientLight.intensity = 0.4;
+    ambientLight.diffuse = new BABYLON.Color3(0.3, 0.2, 0.4);
+    ambientLight.groundColor = new BABYLON.Color3(0.1, 0.15, 0.2);
+    
+    // Основной направленный свет
+    const mainLight = new BABYLON.DirectionalLight(
+        "mainLight", 
+        new BABYLON.Vector3(-0.5, -1, -0.3), 
+        scene
+    );
+    mainLight.intensity = 0.7;
+    mainLight.diffuse = new BABYLON.Color3(0.8, 0.7, 0.6);
+    mainLight.position = new BABYLON.Vector3(30, 50, 30);
+
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP2; // Плавный туман
+    scene.fogDensity = 0.002; // Плотность тумана (можно настроить)
+    scene.fogColor = new BABYLON.Color3(0.1, 0.3, 0.1); // ЗЕЛЕНЫЙ цвет тумана
+    
+    return { ambientLight, mainLight };
+};
 
 function cursorShow(ui, scene){
     // Курсор
@@ -30,7 +117,7 @@ function cursorShow(ui, scene){
     });
 }
 
-async function createEnvironment(scene, shadowGenerator){
+async function createEnvironment(scene){
 
     const steelpipes = new AlphaSprite(scene, ["./public/sprites/steelpipes171x88.png"], 
     {
@@ -108,8 +195,6 @@ async function createEnvironment(scene, shadowGenerator){
     angel.meshes[0].rotation = new BABYLON.Vector3(0, Math.PI/4, 0);
 }
 
-
-
 async function createItems(scene){
     //RIFLE
     const rifle = new Item(scene, {
@@ -152,14 +237,14 @@ const createScene = function () {
     const ui = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
     ui.rootContainer.isPointerBlocker = false;
     scene.preventDefaultOnPointerDown = false;
-    
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    initSky(scene);
     const player = new Player(scene, canvas, ui);
     players.push(player);
     player.CreateController({
         x: 1, y: 5, z: 1
     }, engine.getRenderHeight(), engine.getRenderWidth());
-    player.createHealthUI();
+    player.createUI();
     window.player = player;
     const fps = 60;
     const gravity = -9.81;
@@ -168,20 +253,11 @@ const createScene = function () {
 
     //enemies.push(new Enemy(scene, new BABYLON.Vector3(-10, 3, -10), "ophanim_angel.glb"));
     //enemies.push(new Enemy(scene, new BABYLON.Vector3(30, 1, -30), "angel.glb", 15, 0));
-    
-    const sun = new BABYLON.DirectionalLight("sun", 
-        new BABYLON.Vector3(-1, -2, -1), scene);1
-    sun.intensity = 1.2;
-    sun.position = new BABYLON.Vector3(50, 100, 50);
-    const shadowGenerator = new BABYLON.ShadowGenerator(1024, sun);
+
     
     cursorShow(ui, scene);  
-    createEnvironment(scene, shadowGenerator);
-    createItems(scene, shadowGenerator);
-
-    enemies.forEach(enemy => {
-        shadowGenerator.addShadowCaster(enemy.mesh);
-    });
+    createEnvironment(scene);
+    createItems(scene);
 
 
     scene.onPointerDown = (evt) => {
@@ -194,6 +270,11 @@ const createScene = function () {
 
     return scene;
 };
+
+
+
+// Инициализация всей сцены
+
 
 const scene = createScene();
 engine.runRenderLoop(()=> {
