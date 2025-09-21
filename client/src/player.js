@@ -147,6 +147,14 @@ class Player {
             if (e.deltaY > 0) this.changeSlot(1);
             else this.changeSlot(-1);
         });
+        
+        this.scene.onPointerObservable.add((pointerInfo) => {
+        if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+            if (pointerInfo.event.button === 0) { // ЛКМ
+                this.useItem();
+            }
+        }
+    });
     }
 
     handleActions() {
@@ -262,6 +270,7 @@ class Player {
                 console.log("✅ Предмет добавлен в свободный слот", i);
                 
                 if (item.model) {
+                    item.slotIndex = i;
                     this.attachToCamera(item.model, i);
                 }
                 return true;
@@ -330,9 +339,9 @@ class Player {
                 2.5
             );
             container.rotation = new BABYLON.Vector3(
-                Math.PI/2,
+                -Math.PI/2,
                 0,
-                Math.PI/4,
+                0,
             );
         } else {
             container.position = new BABYLON.Vector3(
@@ -474,10 +483,19 @@ class Player {
 
     useItem() {
         const activeItem = this.getActiveItem();
-        if (activeItem && activeItem.model){
-            console.log("Используем предмет:", activeItem);
-            activeItem.playAnimation("Shot");
+        if(!activeItem){
+            console.log("\\Нет предмета в активном слоте//");
+            return;
         }
+        console.log(`🎯 Используем предмет в слоте ${this.selectedSlot}: ${activeItem.type}`);
+        
+        // Вызываем метод use() у предмета
+        if (activeItem.use && typeof activeItem.use === 'function') {
+            activeItem.use();
+        } else {
+            console.log(`❌ Предмет ${activeItem.type} не имеет метода use()`);
+        }
+
     }
     async throwItem() {
         const item = this.inventory[this.selectedSlot];
@@ -508,7 +526,6 @@ class Player {
             position: dropPosition,
             scale: itemTypes[itemType]?.originalScale || 1
         });
-
         await newItem.spawnItem();
         console.log(`🎯 ${itemType} создан на земле`);
     }
@@ -517,6 +534,10 @@ class Player {
         return this.camera.position.clone();
     }
 }
+
+//Использование предмета, в каждом предмете должна быть функция use()
+//playanim(Shot) - Любое использование 
+//метод использования зависит от типа предмета
 
 
 
