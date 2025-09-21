@@ -111,26 +111,36 @@ async function createEnvironment(scene, shadowGenerator){
 
 
 async function createItems(scene){
+    //RIFLE
     const rifle = new Item(scene, {
         type: "rifle", 
         position: new BABYLON.Vector3(10, 2, 5),
         scale: 1
-    });
-    
+    });    
     try {
         const riflemesh = await rifle.spawnItem();
     } catch (error) {
         console.error("Ошибка создания предмета:", error);
     }
-
+    //TOOL
     const tool = new Item(scene, {
         type: "tool", 
         position: new BABYLON.Vector3(30, 2, 5),
         scale: 1
     });
-    
     try {
         const toolmesh = await tool.spawnItem();
+    } catch (error) {
+        console.error("Ошибка создания предмета:", error);
+    }
+    //CIGGS
+    const ciggs = new Item(scene, {
+        type: "ciggs", 
+        position: new BABYLON.Vector3(10, 2, 15),
+        scale: 1
+    });
+    try {
+        const ciggsmesh = await ciggs.spawnItem();
     } catch (error) {
         console.error("Ошибка создания предмета:", error);
     }

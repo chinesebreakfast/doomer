@@ -323,6 +323,7 @@ class Player {
         container.parent = this.camera;
         
         const itemType = mesh.itemInstance?.type;
+        const itemAttachPos = itemTypes[itemType]?.attach;
         const scale = itemTypes[itemType]?.scale || 1;
 
         realItemMesh.parent = container;
@@ -331,18 +332,13 @@ class Player {
         realItemMesh.rotation = BABYLON.Vector3.Zero();
         realItemMesh.scaling = new BABYLON.Vector3(scale, scale, scale);
 
-        // Позиционирование
-        if (itemType === 'tool') {
+        if (itemAttachPos) {
             container.position = new BABYLON.Vector3(
-                slotIndex === 0 ? 0.7 : -0.7,
-                -2.5, // Начинаем скрытым внизу
-                2.5
+                slotIndex === 0 ? itemAttachPos.right : itemAttachPos.left,
+                itemAttachPos.y, // Начинаем скрытым внизу
+                itemAttachPos.z
             );
-            container.rotation = new BABYLON.Vector3(
-                -Math.PI/2,
-                0,
-                0,
-            );
+            container.rotation = itemAttachPos.rotation;
         } else {
             container.position = new BABYLON.Vector3(
                 slotIndex === 0 ? 0.3 : -0.3,

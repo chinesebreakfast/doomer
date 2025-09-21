@@ -2,17 +2,36 @@ const itemTypes = {
     "rifle": 
     {
         model: "rifle.glb", gun: true, damage: 2, 
-        texture: false
+        texture: false,
     },
     "tool":  
     {
         model: "toolCHECK.glb", gun: false, damage: 1, 
-        texture: false, scale: 1
+        texture: false, scale: 1,
+        attach:{
+            right: 0.7,
+            left: -0.7,
+            y: -2.5,
+            z: 2.5,
+            rotation: new BABYLON.Vector3(-Math.PI/2,0,0,) 
+        }
     },
     "gauntlet": 
     {
         model: "gauntlet.glb", gun: false, 
         damage: 3, texture: false
+    },
+    "ciggs": 
+    {
+        model: "ciggs.glb", gun: false, 
+        damage: 0, texture: false, heal: 1, scale: 0.5,
+        attach:{
+            right: 0.7,
+            left: -0.7,
+            y: -2.5,
+            z: 2.5,
+            rotation: new BABYLON.Vector3(0,0,0,) 
+        }
     }
 };
 
