@@ -38,12 +38,12 @@ function processMaterials(meshes, scene) {
 }
 
 // Функция загрузки уровня
-const loadLevel = async (scene) => {
+const loadLevel = async (scene, modelName) => {
     console.log("Загрузка уровня...");
     
     try {
         const result = await BABYLON.SceneLoader.ImportMeshAsync(
-            "", "./public/models/city/", "massivee.glb", scene
+            "", "./public/models/city/", modelName, scene
         );
         
         console.log("Модель загружена, мешей:", result.meshes.length);
@@ -128,7 +128,7 @@ const setupLight = (scene) => {
         new BABYLON.Vector3(0.5, -0.5, 0.5), 
         scene
     );
-    fillLight.intensity = 0.3;
+    fillLight.intensity = 0.1;
     fillLight.diffuse = new BABYLON.Color3(0.8, 0.8, 0.9);  
     // Легкая постобработка для улучшения контраста
     scene.imageProcessingConfiguration.contrast = 1.2;
@@ -273,11 +273,22 @@ async function createEnvironment(scene) {
     const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 1000, height: 1000 }, scene);
     ground.checkCollisions = true;
     
-    const groundMat = new BABYLON.StandardMaterial("groundMaterial", scene);
+    const groundMat = new BABYLON.PBRMaterial("groundMaterial", scene);
     const groundTexture = new BABYLON.Texture("./public/image.png", scene);
+    groundMat.metallic = 0;
+    groundMat.roughness = 1;
+    groundMat.environmentIntensity = 1;
     groundTexture.uScale = 100;
     groundTexture.vScale = 100;
-    groundMat.diffuseTexture = groundTexture;
+    groundMat.specularColor = new BABYLON.Color3(0,0,0);
+    groundMat.reflectivityColor = new BABYLON.Color3(0,0,0);
+    groundMat.albedoTexture = groundTexture;
+    groundMat.bumpTexture = new BABYLON.Texture("./public/NormalMap.png", scene);
+    groundMat.bumpTexture.uScale = 100;
+    groundMat.bumpTexture.vScale = 100;
+    groundMat.invertNormalMapX = false; // иногда нужно менять для корректного направления
+    groundMat.invertNormalMapY = false;
+    groundMat.bumpTexture.level = 1; // сила эффекта нормалей
     ground.material = groundMat;
 }
 
@@ -299,7 +310,10 @@ const createScene = function () {
      setupAmbientOcclusion(scene);
      setupColorGrading(scene);
     // Загрузка уровня
-    loadLevel(scene);
+    loadLevel(scene, "massive1.glb");
+    loadLevel(scene, "massive2.glb");
+    loadLevel(scene, "massive3.glb");
+    loadLevel(scene, "massive4.glb");
 
     // Инициализация
     initSky(scene);
