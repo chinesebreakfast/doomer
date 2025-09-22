@@ -35,13 +35,11 @@ class Player {
         this.camera = null;
         this.gui = gui;
 
-        this.health = 3;
+        this.health = 1;
         this.maxHealth = 3;
 
         //UI
         this.healtUI = null;
-        this.ciggsUI = null;
-        this.ciggsText = null;
 
         this.inventory = [null, null];
         this.selectedSlot = 0;
@@ -90,11 +88,6 @@ class Player {
 
     createUI(){
         this.createHealthUI();
-        this.createCiggsUI();
-    }
-
-    createCiggsUI(){
-        
     }
 
     createHealthUI(){
@@ -116,6 +109,7 @@ class Player {
         }
         this.updateHealthUI();
     }
+
     // Обновляем UI при потере здоровья
     updateHealthUI() {
         this.healthUI.forEach((heart, i) => {
@@ -127,10 +121,28 @@ class Player {
         if (this.health < 0) this.health = 0;
         this.updateHealthUI();
     }
-    heal(amount = 1) {
+    async heal(amount = 1) {
+        if(this.isHealing) return;
+        this.isHealing = true;
+        this.hideSlot(this.selectedSlot);
+        this.cig.setEnabled(true);
+
+        if(this.cigAnimations.length > 0){
+            const anim = this.cigAnimations[0];
+            anim.reset();
+            anim.start(false);
+            await new Promise(resolve => {
+                anim.onAnimationEndObservable.addOnce(() => resolve());
+            });
+        }
+
         this.health += amount;
         if (this.health > this.maxHealth) this.health = this.maxHealth;
         this.updateHealthUI();
+
+        this.cig.setEnabled(false);
+        this.isHealing = false;
+        this.showSlot(this.selectedSlot);
     }
     setupControls() {
         console.log("SETUP CONTROLS");
@@ -208,6 +220,7 @@ class Player {
 
         this.camera.angularSensibility = 1000;
         this.prevPosition = this.camera.position.clone();
+        this.loadCig();
     }
     updateWeaponSway() {
         // Проверяем движется ли игрок
@@ -339,11 +352,21 @@ class Player {
         const itemAttachPos = itemTypes[itemType]?.attach;
         const scale = itemTypes[itemType]?.scale || 1;
 
-        realItemMesh.parent = container;
+        realItemMesh.parent = container; 
+        console.log("MODEL", mesh.name, "parent:", mesh.parent?.name);
+        console.log("REAL ITEM MESH", realItemMesh.name, "parent:", realItemMesh.parent?.name);
+        if (mesh.itemInstance.uiPlane) {
+            console.log("UI PLANE parent:", mesh.itemInstance.uiPlane.parent?.name);
+        }
+
         realItemMesh.checkCollisions = false;
         realItemMesh.position = BABYLON.Vector3.Zero();
         realItemMesh.rotation = BABYLON.Vector3.Zero();
         realItemMesh.scaling = new BABYLON.Vector3(scale, scale, scale);
+        if (mesh.itemInstance && mesh.itemInstance.type === "ciggs") {
+            mesh.itemInstance.setUIPosition("hand");
+        }
+        
 
         if (itemAttachPos) {
             container.position = new BABYLON.Vector3(
@@ -360,14 +383,14 @@ class Player {
             );
         }
 
-        if (!this.itemContainers) this.itemContainers = [];
-        this.itemContainers[slotIndex] = container;
+    if (!this.itemContainers) this.itemContainers = [];
+    this.itemContainers[slotIndex] = container;
 
-        // Сразу скрываем если это не активный слот
-        if (slotIndex !== this.selectedSlot) {
-            this.setSlotVisibility(slotIndex, false);
-        }
+    // Сразу скрываем если это не активный слот
+    if (slotIndex !== this.selectedSlot) {
+        this.setSlotVisibility(slotIndex, false);
     }
+}
 
     getActiveItem(){
         return this.inventory[this.selectedSlot];
@@ -500,7 +523,7 @@ class Player {
         
         // Вызываем метод use() у предмета
         if (activeItem.use && typeof activeItem.use === 'function') {
-            activeItem.use();
+            activeItem.use(this);
         } else {
             console.log(`❌ Предмет ${activeItem.type} не имеет метода use()`);
         }
@@ -542,11 +565,56 @@ class Player {
     getPosition(){
         return this.camera.position.clone();
     }
-}
 
-//Использование предмета, в каждом предмете должна быть функция use()
-//playanim(Shot) - Любое использование 
-//метод использования зависит от типа предмета
+    async loadCig() {
+        const result = await BABYLON.SceneLoader.ImportMeshAsync(
+            "", 
+            "./public/models/items/base/", 
+            "cig.glb", 
+            this.scene
+        );
+
+      
+
+        const root = result.meshes[0]; // __root__
+        this.cig = root;
+        this.cigAnimations = result.animationGroups || [];
+
+          this.cig.getChildMeshes().forEach(mesh => {
+    if (mesh.material && mesh.material.getActiveTextures().length === 0) {
+        const material = mesh.material;
+        // Подключаем текстуру вручную
+        const tex = new BABYLON.Texture("./public/models/items/base/cig.png", this.scene);
+        if (material instanceof BABYLON.PBRMaterial) {
+            material.albedoTexture = tex;
+        } else {
+            material.diffuseTexture = tex;
+        }
+    }
+});
+
+        // Привязываем к камере
+        root.parent = this.camera;
+
+        // Позиция относительно камеры (чуть ниже, перпендикулярно)
+        root.position = new BABYLON.Vector3(-0.5, -0.35, 0.8); // X вправо/влево, Y вниз, Z вперед
+        root.rotation = new BABYLON.Vector3(0, 0, 0); // перпендикулярно камере
+        root.scaling = new BABYLON.Vector3(0.2, 0.2, 0.2); // увеличиваем по X
+
+        // Отключаем коллизии, pickable и видимость
+        result.meshes.forEach(m => {
+            m.checkCollisions = false;
+            m.isPickable = false;
+            m.setEnabled(false);
+            this.cig.getChildMeshes().forEach(m => m.setEnabled(true));
+        });
+
+        // Отключаем анимации до использования
+        this.cigAnimations.forEach(a => a.stop());
+
+        console.log("Cig загружена, привязана к камере:", root.name);
+    }
+}
 
 
 

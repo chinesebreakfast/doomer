@@ -151,6 +151,16 @@ function setupFog(scene) {
     console.log("Легкий туман настроен, скайбокс виден");
 }
 
+function setupAmbientOcclusion(scene) {
+    // Простейший AO через пост-обработку
+    scene.imageProcessingConfiguration.contrast = 1.3;
+    scene.imageProcessingConfiguration.exposure = 0.9;
+    
+    // Легкое затемнение углов (виньетка)
+    scene.imageProcessingConfiguration.vignetteBlendMode = BABYLON.ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+    scene.imageProcessingConfiguration.vignetteWeight = 0.5;
+}
+
 function assignMaterialsByName(meshes, scene) {
     const textures = {
         'bricks1': 'brick_1.jpg',
@@ -271,6 +281,13 @@ async function createEnvironment(scene) {
     ground.material = groundMat;
 }
 
+function setupColorGrading(scene) {
+    // Улучшаем цвет для объема
+    scene.imageProcessingConfiguration.colorCurvesEnabled = true;
+    scene.imageProcessingConfiguration.contrast = 1.2;
+    scene.imageProcessingConfiguration.exposure = 0.9;
+}
+
 // Создание сцены
 const createScene = function () {
     const scene = new BABYLON.Scene(engine);
@@ -279,6 +296,8 @@ const createScene = function () {
     scene.preventDefaultOnPointerDown = false;
     scene.clearColor = new BABYLON.Color4(0.05, 0.02, 0.08, 1.0);
      setupFog(scene);
+     setupAmbientOcclusion(scene);
+     setupColorGrading(scene);
     // Загрузка уровня
     loadLevel(scene);
 
@@ -298,6 +317,11 @@ const createScene = function () {
     cursorShow(ui, scene);  
     createEnvironment(scene);
     createItems(scene);
+
+    const light = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 5, 0), scene);
+    light.diffuse = new BABYLON.Color3(1, 0, 0.1); // Теплый свет
+    light.intensity = 1;
+    light.range = 15;
 
     // Обработчики событий
     scene.onPointerDown = (evt) => {

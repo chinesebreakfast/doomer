@@ -47,6 +47,14 @@ class Item{
         this.animations = [];
         this.model;
         this.slotIndex = 1;
+        this.uiText = null;
+        this.camAttach;
+        this.realItemMesh = null;
+
+        if (this.type === "ciggs" ?? itemTypes[this.type]) {
+            this.healAmount = itemTypes[this.type].heal;       // Количество лечения
+            this.amount = 3;              // Количество использований
+        }
     }
 
     async spawnItem() {
@@ -61,15 +69,16 @@ class Item{
             );
             
 
-            const mesh = result.meshes[0];
+            const mesh = result.meshes[0]; //__root__
             mesh.position = this.position.clone();
             mesh.itemProps = props;
             mesh.scaling = new BABYLON.Vector3(this.scale, this.scale, this.scale);
 
             // ССЫЛКИ
             this.model = mesh;
+            this.realItemMesh = result.meshes.find(m => m !== mesh && m.getTotalVertices() > 0) || mesh; // главный видимый
             mesh.itemInstance = this;
-            console.log("Предмет создан:", this.type, "коллизии:", mesh.checkCollisions);
+            console.log("Предмет создан:", this.type, "корень:", mesh.name, "реальный меш:", this.realItemMesh.name);
 
             //Добавляем текстуру, если указано
             if (props.texture) {
@@ -90,12 +99,16 @@ class Item{
                 this.animations = result.animationGroups;
                 this.animations.forEach(a => a.stop());
             }
+        
+            if(itemTypes[this.type].heal){
+                this.createItemUI();
+            }
             return mesh;
     }
 
-    use(){
+    use(player){
         console.log(`⚡ Используем предмет: ${this.type}`);
-        //if(!itemTypes[this.type]) return;
+        
         
 
         switch (this.type){
@@ -104,6 +117,16 @@ class Item{
                 break;
             case 'tool':
                 this.useSWORD();
+                break;
+            case 'ciggs':
+                if (this.amount > 0) {
+                    player.heal(itemTypes[this.type].heal);
+                    this.amount--;
+                    this.updateUIText();
+                }
+                if (this.amount <= 0) {
+                    this.destroy();
+                }
         }
 
     }
@@ -118,6 +141,44 @@ class Item{
         else this.playAnimation("Shot_left");
 
         console.log("TOOL");
+    }
+
+    createItemUI() {
+        if (this.type !== "ciggs") return;
+        // плоскость для UI (маленькая, привязана к модели)
+        this.uiPlane = BABYLON.MeshBuilder.CreatePlane(`${this.model.name}_ui`, { width: 3, height: 3 }, this.scene);
+        this.uiPlane.parent = this.realItemMesh; // привязать к мешу
+        this.uiPlane.position = new BABYLON.Vector3(1, 1, 0);
+        this.uiPlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; // всегда к камере
+
+        // GUI для плоскости — удобнее, чем рисовать ручной DynamicTexture
+        this.adt = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(this.uiPlane);
+        this.uiText = new BABYLON.GUI.TextBlock();
+        this.uiText.text = String(this.amount);
+        this.uiText.fontSize = 150;
+        this.uiText.color = "white";
+        this.uiText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+        this.uiText.textVerticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+        this.adt.addControl(this.uiText);
+    }
+
+    setUIPosition(mode) {
+        if (!this.uiPlane) return;
+        if (mode === "hand") {
+            this.uiPlane.position = new BABYLON.Vector3(0, 1, 2);
+            this.uiPlane.scaling = new BABYLON.Vector3(1, 1, 1);
+            this.uiPlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_NONE;
+        } else {
+            this.uiPlane.position = new BABYLON.Vector3(0, 0.4, 0.2);
+            this.uiPlane.scaling = BABYLON.Vector3.One();
+            this.uiPlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+        }
+    }
+
+    updateUIText() {
+        if (this.uiText) {
+        this.uiText.text = String(this.amount);
+        }
     }
 
     playAnimation(animationName) {
